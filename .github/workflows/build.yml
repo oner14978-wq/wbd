@@ -154,8 +154,8 @@ jobs:
           chmod +x gradlew
           cat > /tmp/gb.sh <<'S'
           cd "$PROJECT_DIR"
-          e() { grep -E '^e: ' "$REPORT_DIR/build-$2.log" | head -15; grep -A14 -m1 "What went wrong" "$REPORT_DIR/build-$2.log" | head -16; }
-          f() { e "$@"; echo "::error title=Falha em $1::$(e "$@" | sed ':a;N;$!ba;s/\n/%0A/g')"; }
+          e() { grep -E '^e: ' "$REPORT_DIR/build-$2.log" | head -40; grep -A14 -m1 "What went wrong" "$REPORT_DIR/build-$2.log" | head -16; }
+          f() { echo "::group::ERROS DO BUILD ($1)"; e "$@"; echo "--- ultimas 60 linhas do log ---"; tail -n 60 "$REPORT_DIR/build-$2.log"; echo "::endgroup::"; { echo "### Falha em $1"; echo '```'; e "$@"; tail -n 30 "$REPORT_DIR/build-$2.log"; echo '```'; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; echo "::error title=Falha em $1::$(e "$@" | head -8 | sed ':a;N;$!ba;s/\n/%0A/g')"; }
           for i in 1 2 3 4 5; do
             if ./gradlew "${APP_PATH}:$1" -I /tmp/oi.gradle --no-daemon -q --console=plain > "$REPORT_DIR/build-$2.log" 2>&1; then echo "Build $1 OK"; exit 0; fi
             c=0
@@ -332,9 +332,4 @@ jobs:
           echo "=== GameLaunchFlow.kt (1-25 e 50-70) ==="
           F=$(find . -name GameLaunchFlow.kt | head -1); echo "$F"
           sed -n '1,25p;50,70p' "$F"
-          echo "=== command not found / No such file ==="
-          grep -n -B3 -A3 -E "command not found|No such file" "$REPORT_DIR"/*.log 2>/dev/null | head -40
-          echo "=== erros e: ==="
-          grep -h -E '^e: ' "$REPORT_DIR"/build-*.log 2>/dev/null | head -20
-      - name: Compilar Release
-        if: env.BUILD_RELEASE == 'tr
+          echo "=== command not found / No such file =
