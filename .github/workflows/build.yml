@@ -67,12 +67,42 @@ jobs:
           for p in "${parts[@]}"; do
             [ "$(stat -c %s "$p")" -gt 1024 ] || { echo "::error::Parte vazia ou ponteiro LFS: $p"; exit 1; }
           done
+          echo "== Diagnóstico das partes (nome, tamanho, 4 primeiros bytes) =="
+          for p in "${parts[@]}"; do
+            echo "$(basename "$p")  $(stat -c %s "$p") bytes  inicio:$(head -c4 "$p" | od -An -tx1)"
+          done
+          mkdir -p /tmp/cats
           cat "${parts[@]}" > /tmp/ehsb.zip
-          if [ "$(head -c2 /tmp/ehsb.zip)" != "PK" ] || ! unzip -tqq /tmp/ehsb.zip >/dev/null 2>&1; then
-            echo "::error::ehsb.zip montado está inválido (confira as partes)"
-            exit 1
+          echo "ehsb.zip montado: $(stat -c %s /tmp/ehsb.zip) bytes"
+          if [ "$(head -c2 /tmp/ehsb.zip)" = "PK" ] && unzip -tqq /tmp/ehsb.zip >/dev/null 2>&1; then
+            echo "Método 1 OK: as partes concatenadas formam um zip válido"
+            unzip -oq /tmp/ehsb.zip -d /tmp/cats
+          else
+            echo "::warning::Concatenação simples inválida; testando outros métodos"
+            indep=0
+            for p in "${parts[@]}"; do
+              if unzip -tqq "$p" >/dev/null 2>&1; then indep=$((indep+1)); else echo "Parte não é zip válido sozinha: $(basename "$p")"; fi
+            done
+            if [ "$indep" -eq "$found" ]; then
+              echo "Método 2: cada parte é um zip independente; extraindo todas"
+              for p in "${parts[@]}"; do unzip -oq "$p" -d /tmp/cats; done
+            else
+              echo "Método 3: tentando zip dividido (.z01, .z02 ... .zip)"
+              rm -rf /tmp/sp; mkdir -p /tmp/sp
+              i=0
+              for p in "${parts[@]}"; do
+                i=$((i+1))
+                if [ "$i" -lt "$found" ]; then cp "$p" "/tmp/sp/ehsb.z$(printf '%02d' "$i")"; else cp "$p" /tmp/sp/ehsb.zip; fi
+              done
+              if zip -s 0 /tmp/sp/ehsb.zip --out /tmp/ehsb_joined.zip >/dev/null 2>&1 && unzip -tqq /tmp/ehsb_joined.zip >/dev/null 2>&1; then
+                echo "Método 3 OK"
+                unzip -oq /tmp/ehsb_joined.zip -d /tmp/cats
+              else
+                echo "::error::Nenhum método conseguiu montar o zip. Veja o diagnóstico acima: alguma parte está truncada, faltando ou fora de ordem."
+                exit 1
+              fi
+            fi
           fi
-          mkdir -p /tmp/cats && unzip -oq /tmp/ehsb.zip -d /tmp/cats
           mapfile -t inner < <(find /tmp/cats -type f -iname '*.zip' | sort -V)
           total=${#inner[@]}
           ok=0
@@ -315,21 +345,4 @@ jobs:
             if [ "$ARCH" != "all" ]; then
               case "$name" in
                 *"$ARCH"*|*universal*) ;;
-                *) continue ;;
-              esac
-            fi
-            cp "$f" "/tmp/apks/$name"
-          done < /tmp/apklist.txt
-          ls -lh /tmp/apks
-          if [ -z "$(ls -A /tmp/apks 2>/dev/null)" ]; then
-            echo "::warning::Nenhum APK gerado."
-          fi
-          exit 0
-      - name: Publicar APKs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Cat Launcher
-          path: /tmp/apks/*.apk
-          if-no-files-found: warn
-          
+                *
