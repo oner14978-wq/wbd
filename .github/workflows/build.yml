@@ -163,6 +163,10 @@ jobs:
               echo '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#888" android:pathData="M24,24m-20,0a20,20 0 1,1 40,0a20,20 0 1,1 -40,0"/></vector>' > "$APP_DIR/src/main/res/$r/$n.xml"
               c=1; echo "Placeholder criado: $r/$n"
             done < <(sed -nE "s#^e: file://([^:]+):([0-9]+):([0-9]+) Unresolved reference '([A-Za-z0-9_]+)'.*#\1 \2 \3 \4#p" "$REPORT_DIR/build-$2.log" | sort -u)
+            for X in $(sed -nE 's/.*use `mod ([A-Za-z0-9_]+)` in this file.*/\1/p' "$REPORT_DIR/build-$2.log" | sort -u); do
+              R=$(find "$SRC_ROOT" -path "*/src/$X.rs" -not -path '*/target/*' | head -1); [ -n "$R" ] || continue
+              M=$(dirname "$R")/lib.rs; grep -qF "mod $X; /*a*/" "$M" || { echo "mod $X; /*a*/" >> "$M"; c=1; echo "mod $X adicionado em $M"; }
+            done
             [ "$c" = 1 ] || { f "$@"; exit 1; }
           done
           f "$@"; exit 1
@@ -283,10 +287,6 @@ jobs:
           command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked 2>&1 | tail -n 3
           for t in $T; do
             d=$(dirname "$t")
-            for f in "$d"/src/*.rs; do
-              [ -f "$f" ] && [ -f "$d/src/lib.rs" ] || continue; m=$(basename "$f" .rs)
-              [ "$m" = lib ] || [ "$m" = main ] || grep -qE "^\s*(pub )?mod $m;" "$d/src/lib.rs" || ! grep -rqE "\b$m::" "$d/src" || { echo "mod $m;" >> "$d/src/lib.rs"; echo "mod $m; adicionado"; }
-            done
             [ -f "$d/Cargo.lock" ] && continue
             grep -qE '^\[(package|workspace)\]' "$t" || continue
             (cd "$d" && cargo generate-lockfile) || :
