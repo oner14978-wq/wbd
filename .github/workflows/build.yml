@@ -298,6 +298,9 @@ jobs:
             sed -i "s/) -> impl FnMut(&str) -> bool + 'a {/) -> impl FnMut(\&str) -> bool + 'a + use<'a, 'l, 'o> {/" "$J"
             grep -n "use<'a" "$J"
           fi
+      - name: Corrigir comentários Kotlin
+        run: |
+          find "$SRC_ROOT" -name '*.kt' -exec perl -pi -e 's#^(\s*(?:/\*+|\*)(?!/))(.*)#my($a,$b)=($1,$2);$a.($b=~s,/\*,/_,gr)#e' {} +
       - name: Compilar Debug
         if: env.BUILD_DEBUG == 'true'
         run: |
