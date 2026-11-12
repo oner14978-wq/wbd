@@ -283,6 +283,10 @@ jobs:
           command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked 2>&1 | tail -n 3
           for t in $T; do
             d=$(dirname "$t")
+            for f in "$d"/src/*.rs; do
+              [ -f "$f" ] && [ -f "$d/src/lib.rs" ] || continue; m=$(basename "$f" .rs)
+              [ "$m" = lib ] || [ "$m" = main ] || grep -qE "^\s*(pub )?mod $m;" "$d/src/lib.rs" || ! grep -rqE "\b$m::" "$d/src" || { echo "mod $m;" >> "$d/src/lib.rs"; echo "mod $m; adicionado"; }
+            done
             [ -f "$d/Cargo.lock" ] && continue
             grep -qE '^\[(package|workspace)\]' "$t" || continue
             (cd "$d" && cargo generate-lockfile) || :
@@ -293,17 +297,6 @@ jobs:
             sed -i "s/) -> impl FnMut(&str) -> bool + 'a {/) -> impl FnMut(\&str) -> bool + 'a + use<'a, 'l, 'o> {/" "$J"
             grep -n "use<'a" "$J"
           fi
-      - name: Diagnóstico Rust
-        continue-on-error: true
-        run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
-          for t in $(find "$SRC_ROOT" -name Cargo.toml -not -path '*/target/*'); do
-            grep -q '^\[package\]' "$t" || continue
-            d=$(dirname "$t"); L="$REPORT_DIR/rust.log"
-            (cd "$d" && cargo ndk -t arm64-v8a build --message-format short >"$L" 2>&1) && { echo "Rust OK: $d"; continue; }
-            { echo "### Erros do Rust"; grep -E 'error|panicked' "$L" | head -40; } | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 1
-          done
       - name: Compilar Debug
         if: env.BUILD_DEBUG == 'true'
         run: |
