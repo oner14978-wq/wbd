@@ -298,57 +298,63 @@ jobs:
       - name: Corrigir comentários Kotlin
         run: |
           python3 - <<'PY'
-          import os
-          def fix(s):
-              out = []; i = 0; n = len(s); d = 0
-              while i < n:
-                  c = s[i]; t = s[i:i+2]
-                  if d:
-                      if t == '*/': d = 0; out.append(t); i += 2
-                      elif t == '/*': out.append('/_'); i += 2
-                      else: out.append(c); i += 1
-                      continue
-                  if t == '//':
-                      j = s.find('\n', i); j = n if j < 0 else j
-                      out.append(s[i:j]); i = j
-                  elif t == '/*':
-                      d = 1; out.append(t); i += 2
-                  elif s.startswith('"""', i):
-                      j = s.find('"""', i + 3); j = n if j < 0 else j + 3
-                      out.append(s[i:j]); i = j
-                  elif c == '"':
-                      j = i + 1
-                      while j < n and s[j] not in '"\n':
-                          j += 2 if s[j] == '\\' else 1
-                      j = min(j + 1, n)
-                      out.append(s[i:j]); i = j
-                  elif c == "'":
-                      j = i + 1
-                      if j < n and s[j] == '\\':
-                          k = s.find("'", j + 2)
-                          j = k + 1 if 0 <= k - i < 12 else i + 1
-                      elif j + 1 < n and s[j + 1] == "'":
-                          j += 2
-                      out.append(s[i:j]); i = j
-                  else:
-                      out.append(c); i += 1
-              if d:
-                  out.append('\n*/\n')
-              return ''.join(out)
-          root = os.environ["SRC_ROOT"]
-          changed = 0
-          for dp, dn, fn in os.walk(root):
-              if '/build' in dp or '/.git' in dp:
-                  continue
-              for f in fn:
-                  if not f.endswith('.kt'):
-                      continue
-                  p = os.path.join(dp, f)
-                  s = open(p, encoding='utf-8', errors='surrogateescape').read()
-                  r = fix(s)
-                  if r != s:
-                      open(p, 'w', encoding='utf-8', errors='surrogateescape').write(r)
-                      changed += 1
-          print("Arquivos .kt corrigidos:", changed)
+          import os,re
+          R=re.compile(r'//[^\n]*|"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|/\*[\s\S]*?\*/|/\*[\s\S]*')
+          def f(m):
+              t=m.group(0)
+              if not t.startswith('/*'): return t
+              c=t.endswith('*/') and len(t)>3
+              return '/*'+(t[2:-2] if c else t[2:]).replace('/*','/_')+('*/' if c else '\n*/')
+          for d,_,fs in os.walk(os.environ["SRC_ROOT"]):
+              if '/build' in d or '/.git' in d: continue
+              for n in fs:
+                  if n.endswith('.kt'):
+                      p=os.path.join(d,n); s=open(p,encoding='utf-8',errors='surrogateescape').read(); r=R.sub(f,s)
+                      if r!=s: open(p,'w',encoding='utf-8',errors='surrogateescape').write(r)
           PY
-      - nam
+      - name: Compilar Debug
+        if: env.BUILD_DEBUG == 'true'
+        run: |
+          cd "$PROJECT_DIR"
+          bash /tmp/gb.sh assembleDebug debug
+      - name: Compilar Release
+        if: env.BUILD_RELEASE == 'true'
+        run: |
+          cd "$PROJECT_DIR"
+          bash /tmp/gb.sh assembleRelease release
+      - name: Coletar APKs
+        if: always()
+        run: |
+          set +e +o pipefail
+          mkdir -p /tmp/apks
+          P="$PROJECT_DIR"
+          if [ -z "$P" ]; then P=.; fi
+          find "$P" -type f -name '*.apk' -path '*/build/outputs/apk/*' 2>/dev/null > /tmp/apklist.txt
+          while read -r f; do
+            [ -n "$f" ] || continue
+            name=$(basename "$f")
+            if [ "$ARCH" != "all" ]; then
+              case "$name" in
+                *"$ARCH"*|*universal*) ;;
+                *) continue ;;
+              esac
+            fi
+            cp "$f" "/tmp/apks/$name"
+          done < /tmp/apklist.txt
+          if [ -z "$(ls -A /tmp/apks 2>/dev/null)" ]; then
+            echo "::warning::Nenhum APK gerado."
+          fi
+          exit 0
+      - name: Publicar APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cat Launcher
+          path: /tmp/apks/*.apk
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Logs
+          path: /tmp/zreport/*
+          
