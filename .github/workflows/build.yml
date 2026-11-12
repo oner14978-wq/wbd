@@ -172,8 +172,8 @@ jobs:
           chmod +x gradlew
           cat > /tmp/gb.sh <<'S'
           cd "$PROJECT_DIR"
-          e() { grep -E '^e: ' "$REPORT_DIR/build-$2.log" | head -15; grep -A14 -m1 "What went wrong" "$REPORT_DIR/build-$2.log" | head -16; }
-          f() { e "$@"; echo "===== ULTIMAS 80 LINHAS DO LOG ====="; grep -vE '^ +(Compiling|Downloaded|Downloading) ' "$REPORT_DIR/build-$2.log" | tail -n 80; echo "::error title=Falha em $1::$(e "$@" | sed ':a;N;$!ba;s/\n/%0A/g')"; }
+          e() { L="$REPORT_DIR/build-$2.log"; grep -E '^e: ' "$L" | head -15; grep -A6 -m1 "What went wrong" "$L" | head -8; grep -vE '^ +(Compiling|Downloaded|Downloading) ' "$L" | grep -E -A12 -m6 '^ *error(\[E[0-9]+\])?:|panicked at|could not compile|linker|ld: ' | head -60; }
+          f() { e "$@" > "$REPORT_DIR/erros-$2.txt"; { echo "### Erros em $1"; echo '```'; cat "$REPORT_DIR/erros-$2.txt"; echo '```'; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; e "$@"; echo "===== ULTIMAS 250 LINHAS DO LOG ====="; grep -vE '^ +(Compiling|Downloaded|Downloading) ' "$REPORT_DIR/build-$2.log" | tail -n 250; echo "::error title=Falha em $1::$(e "$@" | sed ':a;N;$!ba;s/\n/%0A/g')"; }
           for i in 1 2 3 4 5; do
             if ./gradlew "${APP_PATH}:$1" -I /tmp/oi.gradle --no-daemon -q --console=plain > "$REPORT_DIR/build-$2.log" 2>&1; then echo "Build $1 OK"; exit 0; fi
             c=0
@@ -338,11 +338,4 @@ jobs:
           mkdir -p /tmp/apks
           P="$PROJECT_DIR"
           if [ -z "$P" ]; then P=.; fi
-          find "$P" -type f -name '*.apk' -path '*/build/outputs/apk/*' 2>/dev/null > /tmp/apklist.txt
-          while read -r f; do
-            [ -n "$f" ] || continue
-            name=$(basename "$f")
-            if [ "$ARCH" != "all" ]; then
-              case "$name" in
-                *"$ARCH"*|*universal*) ;;
-                *
+          find "$P" -type f -name
