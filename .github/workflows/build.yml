@@ -144,8 +144,27 @@ jobs:
           chmod +x gradlew
           cat > /tmp/gb.sh <<'S'
           cd "$PROJECT_DIR"
-          e() { L="$REPORT_DIR/build-$2.log"; grep -E '^e: ' "$L" | head -15; grep -E -A9 -m5 '^ *error(\[E[0-9]+\])?:|panicked' "$L" | head -50; grep -A4 -m1 "What went wrong" "$L"; }
-          f() { e "$@" > "$REPORT_DIR/erros-$2.txt"; tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}" < "$REPORT_DIR/erros-$2.txt"; echo "===== ERRO (sem avisos) ====="; grep -vE '^(w: |warning|[[:space:]]*(Compiling|Downloaded|Downloading|Checking) )' "$REPORT_DIR/build-$2.log" | tail -n 40; echo "::error title=Falha em $1::$(tr '\n' '|' < "$REPORT_DIR/erros-$2.txt" | cut -c1-1500)"; }
+          FIXLOG="$REPORT_DIR/autofix.log"; : > "$FIXLOG"
+          # mostra só o erro real (sem avisos "w:", sem ruído), no máximo 6 linhas
+          e() {
+            L="$REPORT_DIR/build-$2.log"
+            {
+              grep -E '^e: ' "$L" | grep -viE 'warning' | grep -E 'Syntax error' \
+              || grep -E '^e: ' "$L" \
+              || grep -E -A4 -m1 '^ *error(\[E[0-9]+\])?:|panicked' "$L" \
+              || grep -A3 -m1 'What went wrong' "$L" \
+              || grep -E -m3 'FAILED|Execution failed' "$L"
+            } 2>/dev/null | head -6 | cut -c1-300 \
+              | sed -E 's#file:///home/runner/zalith-src/##; s#src/main/java/com/movtery/zalithlauncher/#~/#'
+          }
+          f() {
+            e "$@" > "$REPORT_DIR/erros-$2.txt"
+            sed -nE 's#^e: file://([^:]+):.*Unclosed comment.*#\1#p' "$REPORT_DIR/build-$2.log" | sort -u | while read -r k; do cp "$k" "$REPORT_DIR/"; done
+            echo "ERRO REAL em $1:"
+            cat "$REPORT_DIR/erros-$2.txt"
+            { echo "### Erro em $1"; echo '```'; cat "$REPORT_DIR/erros-$2.txt"; echo '```'; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            echo "::error title=Falha em $1::$(head -3 "$REPORT_DIR/erros-$2.txt" | tr '\n' '|' | cut -c1-400)"
+          }
           for i in 1 2 3 4 5; do
             if ./gradlew "${APP_PATH}:$1" -I /tmp/oi.gradle --no-daemon -q --warning-mode none --console=plain > "$REPORT_DIR/build-$2.log" 2>&1; then echo "Build $1 OK"; exit 0; fi
             c=0
@@ -155,18 +174,18 @@ jobs:
               if [ "$r" = string ]; then
                 X="$APP_DIR/src/main/res/values/zz_missing.xml"
                 [ -f "$X" ] || printf '<resources>\n</resources>\n' > "$X"
-                grep -q "\"$n\"" "$X" || { sed -i "s#</resources>#<string name=\"$n\">${n//_/ }</string>\n</resources>#" "$X"; c=1; echo "String criada: $n"; }
+                grep -q "\"$n\"" "$X" || { sed -i "s#</resources>#<string name=\"$n\">${n//_/ }</string>\n</resources>#" "$X"; c=1; echo "String criada: $n" >> "$FIXLOG"; }
                 continue
               fi
-              [ -n "$r" ] || { echo "SEM PADRAO: ${s:0:100}"; continue; }
+              [ -n "$r" ] || continue
               mkdir -p "$APP_DIR/src/main/res/$r"
               echo '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#888" android:pathData="M24,24m-20,0a20,20 0 1,1 40,0a20,20 0 1,1 -40,0"/></vector>' > "$APP_DIR/src/main/res/$r/$n.xml"
-              c=1; echo "Placeholder criado: $r/$n"
+              c=1; echo "Placeholder criado: $r/$n" >> "$FIXLOG"
             done < <(sed -nE "s#^e: file://([^:]+):([0-9]+):([0-9]+) Unresolved reference '([A-Za-z0-9_]+)'.*#\1 \2 \3 \4#p" "$REPORT_DIR/build-$2.log" | sort -u)
             while read -r P X; do
               F=$(find "$SRC_ROOT" -path "*/$P" -not -path '*/target/*' | head -1)
               [ -n "$F" ] && [ -e "$(dirname "$F")/$X.rs" ] || continue
-              grep -qF "use crate::$X; /*a*/" "$F" || { echo "use crate::$X; /*a*/" >> "$F"; c=1; echo "use crate::$X adicionado em $F"; }
+              grep -qF "use crate::$X; /*a*/" "$F" || { echo "use crate::$X; /*a*/" >> "$F"; c=1; echo "use crate::$X adicionado em $F" >> "$FIXLOG"; }
             done < <(awk '/cannot find module or crate `/{split($0,a,"`");x=a[2];next} x&&$1=="-->"{sub(/:[0-9]+:[0-9]+$/,"",$2);print $2,x;x=""}' "$REPORT_DIR/build-$2.log" | sort -u)
             [ "$c" = 1 ] || { f "$@"; exit 1; }
           done
@@ -335,17 +354,4 @@ jobs:
             echo "::warning::Nenhum APK gerado."
           fi
           exit 0
-      - name: Publicar APKs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Cat Launcher
-          path: /tmp/apks/*.apk
-          if-no-files-found: warn
-      - name: Logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Logs
-          path: /tmp/zreport/*
-          
+      - name: Public
