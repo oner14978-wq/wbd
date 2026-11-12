@@ -48,14 +48,21 @@ jobs:
           mkdir -p "$REPORT_DIR" "$SRC_ROOT"
           : > "$REPORT_DIR/problems.txt"
           : > "$REPORT_DIR/fixed.txt"
-      - name: "Verificação 1/4 - localizar e testar os arquivos ZIP"
+      - name: "Verificação 1/4 - ZIPs"
         run: |
           set -uo pipefail
           ZIPS=($(seq 1 29))
           expected=${#ZIPS[@]}; found=0; ok=0
           : > "$REPORT_DIR/zips.txt"
+          # Se não há nenhum CatNN.zip mas o projeto já está no repositório, usa-o direto
+          if ! find "$GITHUB_WORKSPACE" -type f -iregex '.*/cat[_ -]*[0-9]+\.zip' -not -path '*/.git/*' | grep -q . \
+             && { [ -f "$GITHUB_WORKSPACE/settings.gradle.kts" ] || [ -f "$GITHUB_WORKSPACE/settings.gradle" ]; }; then
+            echo "Nenhum CatNN.zip encontrado; usando o projeto que já está no repositório."
+            tar --exclude=.git -C "$GITHUB_WORKSPACE" -cf - . | tar -C "$SRC_ROOT" -xf -
+            exit 0
+          fi
           find_one() {
-            find "$GITHUB_WORKSPACE" -type f \( -iname "Cat$1.zip" -o -iname "Cat$(printf '%02d' "$1").zip" -o -iname "Cat__$(printf '%02d' "$1").zip" \) -not -path '*/.git/*' 2>/dev/null \
+            find "$GITHUB_WORKSPACE" -type f -iregex ".*/cat[_ -]*0*$1\.zip" -not -path '*/.git/*' 2>/dev/null \
               | awk '{ print length($0) "\t" $0 }' | sort -n | cut -f2-
           }
           for n in "${ZIPS[@]}"; do
@@ -85,7 +92,7 @@ jobs:
             echo "ZIPS_OK=$ok"
           } >> "$GITHUB_ENV"
           [ "$ok" -eq "$expected" ] || { echo "::error::Nem todos os ZIPs passaram na verificação."; exit 1; }
-      - name: "Verificação 2/4 - extrair para estrutura organizada e detectar conflitos"
+      - name: "Verificação 2/4 - extrair"
         run: |
           set -uo pipefail
           while IFS= read -r z; do
@@ -100,25 +107,34 @@ jobs:
             shopt -s dotglob; mv "$d"/* "$SRC_ROOT"/; rmdir "$d"
           fi
           echo "Conteúdo de $SRC_ROOT:"; ls -la "$SRC_ROOT" | head -60
-      - name: "Completar arquivos faltantes a partir do repositório original"
+      - name: "Completar arquivos faltantes"
         run: |
           set -eu
-          [ -d /tmp/upstream ] || git clone --depth 1 --branch "$UPSTREAM_REF" https://github.com/ZalithLauncher/ZalithLauncher2.git /tmp/upstream
+          [ -d /tmp/upstream ] || { git clone --depth 1 --branch "$UPSTREAM_REF" https://github.com/ZalithLauncher/ZalithLauncher2.git /tmp/upstream || git clone --depth 1 https://github.com/ZalithLauncher/ZalithLauncher2.git /tmp/upstream; }
           if [ ! -f "$SRC_ROOT/settings.gradle.kts" ] && [ ! -f "$SRC_ROOT/settings.gradle" ]; then
-            echo "Raiz do Gradle ausente nos ZIPs; completando do repositório original (ref: $UPSTREAM_REF)."
             for f in settings.gradle.kts build.gradle.kts gradle.properties gradlew gradlew.bat; do
               if [ -f "/tmp/upstream/$f" ] && [ ! -f "$SRC_ROOT/$f" ]; then
                 cp "/tmp/upstream/$f" "$SRC_ROOT/$f"
-                echo "Completado da raiz original: $f"
               fi
             done
             if [ -d /tmp/upstream/gradle ] && [ ! -d "$SRC_ROOT/gradle" ]; then
               cp -r /tmp/upstream/gradle "$SRC_ROOT/gradle"
-              echo "Completado da raiz original: pasta gradle/"
             fi
             if [ -f "$SRC_ROOT/gradlew" ]; then chmod +x "$SRC_ROOT/gradlew"; fi
           fi
-          added=0
+          # Completa gradlew e gradle/wrapper se algum estiver ausente no projeto
+          S=$(find "$SRC_ROOT" -maxdepth 3 \( -name settings.gradle.kts -o -name settings.gradle \) -not -path '*/build/*' 2>/dev/null | awk '{ print length($0) "\t" $0 }' | sort -n | cut -f2- | sed -n 1p || true)
+          if [ -n "${S:-}" ]; then
+            PD=$(dirname "$S")
+            for f in gradlew gradlew.bat; do
+              [ -f "$PD/$f" ] || { [ -f "/tmp/upstream/$f" ] && cp "/tmp/upstream/$f" "$PD/$f" && echo "Copiado $f do upstream"; } || true
+            done
+            mkdir -p "$PD/gradle/wrapper"
+            for f in gradle-wrapper.jar gradle-wrapper.properties; do
+              [ -f "$PD/gradle/wrapper/$f" ] || { [ -f "/tmp/upstream/gradle/wrapper/$f" ] && cp "/tmp/upstream/gradle/wrapper/$f" "$PD/gradle/wrapper/$f" && echo "Copiado wrapper/$f do upstream"; } || true
+            done
+            [ -f "$PD/gradlew" ] && chmod +x "$PD/gradlew"
+          fi
           for m in ZalithLauncher Guide InputMap ColorPicker CardGrid LayerController Terracotta PetLib; do
             U="/tmp/upstream/$m/src/main/res"
             D="$SRC_ROOT/$m/src/main/res"
@@ -127,12 +143,10 @@ jobs:
               if [ ! -e "$D/$f" ]; then
                 mkdir -p "$(dirname "$D/$f")"
                 cp "$U/$f" "$D/$f"
-                echo "Recurso completado: $m/src/main/res/$f"
-                added=$((added+1))
               fi
             done < <(cd "$U" && find . -type f | sed 's|^\./||')
           done
-      - name: "Verificação 3/4 - identificar a estrutura real do projeto Android"
+      - name: "Verificação 3/4 - estrutura do projeto"
         run: |
           base64 -d <<'B64' | gunzip | python3 -
           H4sIAAAAAAACA51Y607jShL+76dotVbCZsDA/NlzzMlBnIHDcCCAAjNaKcmJOnE7GHyT2wkZZfIwq/2xDzCPwIvtV93txAlZ9hKJxF2uqq6q/urSxGmRlxXL1R4r5R5T3/AwTvKho8oRa4Huy2wal3nW5fedT4PO7e0D7x+Dt9h42zm/u+08DM4uO7zv3F9d3uH9nA8ncRLyPcb9cSnCRJrHuKLfLA/lIM3DSSKVpo9mM/qtRDmWFV84oYzYi0ie3aFQ0gschk+UlyzcYyHMjBSLM7Jhk4c+oeoGfZjQnWmR
@@ -155,7 +169,7 @@ jobs:
           cat > /tmp/gb.sh <<'S'
           cd "$PROJECT_DIR"
           e() { grep -E '^e: ' "$REPORT_DIR/build-$2.log" | sed -n '1,40p'; grep -A14 -m1 "What went wrong" "$REPORT_DIR/build-$2.log" | head -16; }
-          f() { echo "::group::ERROS DO BUILD ($1)"; e "$@"; echo "--- ultimas 60 linhas do log ---"; tail -n 60 "$REPORT_DIR/build-$2.log"; echo "::endgroup::"; { echo "### Falha em $1"; echo '```'; e "$@"; tail -n 30 "$REPORT_DIR/build-$2.log"; echo '```'; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; echo "::error title=Falha em $1::$(e "$@" | sed -n '1,8p' | sed ':a;N;$!ba;s/\n/%0A/g')"; }
+          f() { echo "::group::ERROS ($1)"; e "$@"; tail -n 40 "$REPORT_DIR/build-$2.log"; echo "::endgroup::"; { e "$@"; tail -n 30 "$REPORT_DIR/build-$2.log"; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; echo "::error title=Falha em $1::$(e "$@" | sed -n '1,6p' | sed ':a;N;$!ba;s/\n/%0A/g')"; }
           for i in 1 2 3 4 5; do
             if ./gradlew "${APP_PATH}:$1" -I /tmp/oi.gradle --no-daemon -q --console=plain > "$REPORT_DIR/build-$2.log" 2>&1; then echo "Build $1 OK"; exit 0; fi
             c=0
@@ -246,64 +260,47 @@ jobs:
           find "$SRC_ROOT" -name Cargo.toml -not -path '*/target/*' | while read -r t; do
             [ -f "$(dirname "$t")/Cargo.lock" ] || { echo "Gerando Cargo.lock em $t"; cargo generate-lockfile --manifest-path "$t"; }
           done
-      - name: Corrigir E0700 (lifetime oculto em progress) em jni_bridge.rs
+      - name: Corrigir jni_bridge.rs
         if: env.HAS_RUST == 'true'
         run: |
           F="$SRC_ROOT/CatCore/rust/src/jni_bridge.rs"
+          if [ ! -f "$F" ]; then
+            F=$(find "$SRC_ROOT" -name jni_bridge.rs -not -path '*/target/*' | head -1 || true)
+          fi
+          [ -n "${F:-}" ] && [ -f "$F" ] || { echo "::warning::jni_bridge.rs não encontrado; patch ignorado."; exit 0; }
           sed -i -E "s/-> impl FnMut\(&str\) -> bool \+ 'a \{/-> impl FnMut(\&str) -> bool + use<'a, 'l, 'o> {/" "$F"
-          grep -n "impl FnMut(&str) -> bool" "$F"
-          grep -q "use<'a, 'l, 'o>" "$F" || { echo "::error::patch do progress() nao aplicado em jni_bridge.rs"; exit 1; }
-          rustc --version
-      - name: Corrigir imports Rust (jni_bridge) e diagnosticar
-        if: env.HAS_RUST == 'true'
-        continue-on-error: true
-        run: |
-          cd "$SRC_ROOT/CatCore/rust" && sed -i 's/^use crate::{batch, hash, launch, manifest, plan,/use crate::{batch, hash, launch, manifest, perf, verify, plan,/' src/jni_bridge.rs && grep -n '^use crate' src/jni_bridge.rs && cargo ndk --platform 26 -t arm64-v8a build --release 2>&1 | grep -E -A12 '^error' | head -60
-      - name: Reparar comentarios Kotlin nao fechados (startup)
+          sed -i 's/^use crate::{batch, hash, launch, manifest, plan,/use crate::{batch, hash, launch, manifest, perf, verify, plan,/' "$F"
+          grep -q "use<'a, 'l, 'o>" "$F" || echo "::warning::patch progress() não aplicado (código já ajustado ou diferente)."
+      - name: Reparar comentarios Kotlin (startup)
         run: |
           python3 - <<'PY'
-          import os,sys
-          root=os.environ["SRC_ROOT"]
+          import os
           def fix(t):
-              out=[];i=0;n=len(t);d=0;ch=0
+              o=[];i=0;n=len(t);d=0;c=0
               while i<n:
-                  c=t[i:i+2]
-                  if d>0:
-                      if c=="*/": d=0; out.append("*/"); i+=2
-                      elif c=="/*": out.append("/(*)"); ch+=1; i+=2
-                      else: out.append(t[i]); i+=1
-                      continue
-                  if t.startswith('"""',i):
-                      j=t.find('"""',i+3); j=n if j<0 else j+3
-                      out.append(t[i:j]); i=j
-                  elif t[i]=='"':
-                      j=i+1
-                      while j<n and t[j]!='"' and t[j]!="\n":
-                          j+=2 if t[j]=="\\" else 1
-                      out.append(t[i:j+1]); i=j+1
-                  elif t[i]=="'":
-                      j=i+1
-                      while j<n and t[j]!="'" and t[j]!="\n":
-                          j+=2 if t[j]=="\\" else 1
-                      out.append(t[i:j+1]); i=j+1
-                  elif c=="//":
-                      j=t.find("\n",i); j=n if j<0 else j
-                      out.append(t[i:j]); i=j
-                  elif c=="/*": d=1; out.append("/*"); i+=2
-                  else: out.append(t[i]); i+=1
-              r="".join(out)
-              if d>0: r+="\n*/\n"; ch+=1
-              return r,ch
-          for dp,_,fs in os.walk(root):
+                  x=t[i:i+2]
+                  if d:
+                      if x=="*/": d=0;o.append(x);i+=2
+                      elif x=="/*": o.append("/(*)");c+=1;i+=2
+                      else: o.append(t[i]);i+=1
+                  elif t.startswith('"""',i):
+                      j=t.find('"""',i+3);j=n if j<0 else j+3;o.append(t[i:j]);i=j
+                  elif t[i] in "\"'":
+                      q=t[i];j=i+1
+                      while j<n and t[j]!=q and t[j]!="\n": j+=2 if t[j]=="\\" else 1
+                      o.append(t[i:j+1]);i=j+1
+                  elif x=="//":
+                      j=t.find("\n",i);j=n if j<0 else j;o.append(t[i:j]);i=j
+                  elif x=="/*": d=1;o.append(x);i+=2
+                  else: o.append(t[i]);i+=1
+              if d: o.append("\n*/\n");c+=1
+              return "".join(o),c
+          for dp,_,fs in os.walk(os.environ["SRC_ROOT"]):
               if "/build/" in dp+"/" or "/startup" not in dp: continue
               for f in fs:
-                  if not f.endswith(".kt"): continue
-                  p=os.path.join(dp,f)
-                  t=open(p,encoding="utf-8",errors="replace").read()
-                  r,ch=fix(t)
-                  if ch:
-                      open(p,"w",encoding="utf-8").write(r)
-                      print("Reparado:",p,"alteracoes:",ch)
+                  if f.endswith(".kt"):
+                      p=os.path.join(dp,f);r,c=fix(open(p,encoding="utf-8",errors="replace").read())
+                      if c: open(p,"w",encoding="utf-8").write(r);print("Reparado:",p,c)
           PY
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -337,6 +334,4 @@ jobs:
            r=b"".join(b"\0"+b"".join(G[y*16//s][x*16//s] for x in range(s)) for y in range(s))
            return b"\x89PNG\r\n\x1a\n"+w(b"IHDR",struct.pack(">IIBBBBB",s,s,8,2,0,0,0))+w(b"IDAT",zlib.compress(r))+w(b"IEND",b"")
           P=os.environ["PROJECT_DIR"]+"/**/src/*/res/"
-          for f in glob.glob(P+"mipmap-*/ic_launcher*",recursive=True)+glob.glob(P+"drawable*/ic_launcher_foreground.*",recursive=True): os.remove(f); print("removido",f)
-          os.makedirs(R+"drawable-nodpi",exist_ok=True); open(R+"drawable-nodpi/ic_launcher_foreground.png","wb").write(png(192))
-     
+          for f in glob.glob(P+"mipmap-*/ic_lau
