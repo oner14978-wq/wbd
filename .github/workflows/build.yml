@@ -65,11 +65,16 @@ jobs:
           for p in "${parts[@]}"; do
             [ "$(stat -c %s "$p")" -gt 1024 ] || { echo "::error::Parte vazia ou ponteiro LFS: $p"; exit 1; }
           done
+          mkdir -p /tmp/cats
           cat "${parts[@]}" > /tmp/ehsb.zip
-          if [ "$(head -c2 /tmp/ehsb.zip)" != "PK" ] || ! unzip -tqq /tmp/ehsb.zip >/dev/null 2>&1; then
-            echo "::error::ehsb.zip inválido"; ls -l "${parts[@]}" | awk '{print $5,$9}'; exit 1
+          if [ "$(head -c2 /tmp/ehsb.zip)" = PK ] && unzip -tqq /tmp/ehsb.zip >/dev/null 2>&1; then
+            unzip -oq /tmp/ehsb.zip -d /tmp/cats
+          else
+            echo "Partes são zips independentes; extraindo cada uma"
+            for p in "${parts[@]}"; do
+              unzip -oq "$p" -d /tmp/cats; [ $? -le 1 ] || { echo "::error::Parte inválida: $p"; exit 1; }
+            done
           fi
-          mkdir -p /tmp/cats && unzip -oq /tmp/ehsb.zip -d /tmp/cats
           mapfile -t inner < <(find /tmp/cats -type f -iname '*.zip' | sort -V)
           total=${#inner[@]}
           ok=0
