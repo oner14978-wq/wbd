@@ -48,20 +48,20 @@ jobs:
           mkdir -p "$REPORT_DIR" "$SRC_ROOT"
           : > "$REPORT_DIR/problems.txt"
           : > "$REPORT_DIR/fixed.txt"
-      - name: "Verificação 1/4 - juntar Cat__NN.bin, extrair e testar"
+      - name: "Verificação 1/4 - juntar Cat__NN.zip/.bin, extrair e testar"
         run: |
           set -uo pipefail
-          PARTS_EXPECTED=22    # quantidade de arquivos Cat__NN.bin
+          PARTS_EXPECTED=22    # quantidade de arquivos Cat__NN (.zip ou .bin)
           : > "$REPORT_DIR/zips.txt"
           mapfile -t parts < <(
-            find "$GITHUB_WORKSPACE" -type f -iregex '.*/Cat__[0-9]+\.bin' -not -path '*/.git/*' 2>/dev/null \
-              | sed -E 's#.*/Cat__0*([0-9]+)\.bin$#\1\t&#I' | sort -n | cut -f2-
+            find "$GITHUB_WORKSPACE" -type f -iregex '.*/Cat__[0-9]+\.\(bin\|zip\)' -not -path '*/.git/*' 2>/dev/null \
+              | sed -E 's#.*/Cat__0*([0-9]+)\.(bin|zip)$#\1\t&#I' | sort -n | cut -f2-
           )
           found=${#parts[@]}
           echo "Partes encontradas: $found"
           printf '%s\n' "${parts[@]}"
           if [ "$found" -ne "$PARTS_EXPECTED" ]; then
-            echo "::error::Esperava $PARTS_EXPECTED partes (Cat__NN.bin), encontrei $found"
+            echo "::error::Esperava $PARTS_EXPECTED partes (Cat__NN), encontrei $found"
             exit 1
           fi
           for p in "${parts[@]}"; do
@@ -332,6 +332,4 @@ jobs:
           name: Cat Launcher
           path: /tmp/apks/*.apk
           if-no-files-found: warn
-
-
           
