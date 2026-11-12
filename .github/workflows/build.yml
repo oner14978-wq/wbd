@@ -117,19 +117,16 @@ jobs:
           fi
       - name: "V3 achar projeto Android"
         run: |
-          base64 -d <<'B64' | gunzip | python3 -
-          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
-          +RdzGZ//xRQAAA==
-          B64
+          set +e +o pipefail; set -u
+          sh=$(find "$SRC_ROOT" -maxdepth 3 -name 'settings.gradle*' | awk '{print length, $0}' | sort -n | head -1 | cut -d' ' -f2-)
+          [ -n "$sh" ] || { echo "::error::settings.gradle nao encontrado em $SRC_ROOT"; exit 1; }
+          P=$(dirname "$sh")
+          B=$(grep -rl applicationId "$P" --include=build.gradle --include=build.gradle.kts | grep -v /target/ | awk '{print length, $0}' | sort -n | head -1 | cut -d' ' -f2-)
+          [ -n "$B" ] || { echo "::error::modulo Android (applicationId) nao encontrado"; exit 1; }
+          A=$(dirname "$B"); R=${A#"$P"/}
+          N=$(grep -rhoE 'ndkVersion *=? *"[^"]+"' "$P" --include=build.gradle --include=build.gradle.kts | head -1 | cut -d'"' -f2)
+          { echo "PROJECT_DIR=$P"; echo "APP_DIR=$R"; echo "APP_PATH=:${R//\//:}"; echo "NDK_VERSION=$N"; printf 'JDK_LIST<<E\n25\n21\nE\n'; } >> "$GITHUB_ENV"
+          echo "Projeto: $P | app: $R | ndk: ${N:-nenhum}"
       - name: "V4 correção automática"
         run: |
           set -uo pipefail
