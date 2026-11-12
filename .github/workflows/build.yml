@@ -246,11 +246,11 @@ jobs:
           find "$SRC_ROOT" -name Cargo.toml -not -path '*/target/*' | while read -r t; do
             [ -f "$(dirname "$t")/Cargo.lock" ] || { echo "Gerando Cargo.lock em $t"; cargo generate-lockfile --manifest-path "$t"; }
           done
-      - name: Diagnostico Rust (mostra o erro real)
+      - name: Corrigir imports Rust (jni_bridge) e diagnosticar
         if: env.HAS_RUST == 'true'
         continue-on-error: true
         run: |
-          cd "$SRC_ROOT/CatCore/rust" && cargo ndk --platform 26 -t arm64-v8a build --release 2>&1 | grep -E -A12 '^error' | head -60
+          cd "$SRC_ROOT/CatCore/rust" && sed -i 's/^use crate::{batch, hash, launch, manifest, plan,/use crate::{batch, hash, launch, manifest, perf, verify, plan,/' src/jni_bridge.rs && grep -n '^use crate' src/jni_bridge.rs && cargo ndk --platform 26 -t arm64-v8a build --release 2>&1 | grep -E -A12 '^error' | head -60
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Decidir tipos de build
