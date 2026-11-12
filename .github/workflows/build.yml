@@ -144,10 +144,10 @@ jobs:
           chmod +x gradlew
           cat > /tmp/gb.sh <<'S'
           cd "$PROJECT_DIR"
-          e() { L="$REPORT_DIR/build-$2.log"; grep -E '^e: ' "$L" | head -15; grep -A6 -m1 "What went wrong" "$L"; grep -E -A9 -m5 '^ *error(\[E[0-9]+\])?:|panicked' "$L" | head -50; }
-          f() { e "$@" > "$REPORT_DIR/erros-$2.txt"; tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}" < "$REPORT_DIR/erros-$2.txt"; echo "::error title=Falha em $1::$(sed ':a;N;$!ba;s/\n/%0A/g' "$REPORT_DIR/erros-$2.txt")"; }
+          e() { L="$REPORT_DIR/build-$2.log"; grep -E '^e: ' "$L" | head -15; grep -E -A9 -m5 '^ *error(\[E[0-9]+\])?:|panicked' "$L" | head -50; grep -A4 -m1 "What went wrong" "$L"; }
+          f() { e "$@" > "$REPORT_DIR/erros-$2.txt"; tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}" < "$REPORT_DIR/erros-$2.txt"; echo "===== ERRO (sem avisos) ====="; grep -vE '^(w: |warning|[[:space:]]*(Compiling|Downloaded|Downloading|Checking) )' "$REPORT_DIR/build-$2.log" | tail -n 40; echo "::error title=Falha em $1::$(tr '\n' '|' < "$REPORT_DIR/erros-$2.txt" | cut -c1-1500)"; }
           for i in 1 2 3 4 5; do
-            if ./gradlew "${APP_PATH}:$1" -I /tmp/oi.gradle --no-daemon -q --console=plain > "$REPORT_DIR/build-$2.log" 2>&1; then echo "Build $1 OK"; exit 0; fi
+            if ./gradlew "${APP_PATH}:$1" -I /tmp/oi.gradle --no-daemon -q --warning-mode none --console=plain > "$REPORT_DIR/build-$2.log" 2>&1; then echo "Build $1 OK"; exit 0; fi
             c=0
             while read -r p l k n; do
               [ "$n" = weight ] && { sed -i -E "${l}s/\.weight\([^)]*\)//" "$p"; c=1; continue; }
