@@ -333,17 +333,12 @@ jobs:
               if n != s:
                   p.write_text(n, encoding="utf8"); print("corrigido:", p)
           PY
+      - name: Corrigir import do Choreographer (UiTimings)
+        run: |
+          grep -rl --include=*.kt 'import android.os.Choreographer' "$SRC_ROOT" | while read -r f; do
+            sed -i 's/^import android\.os\.Choreographer$/import android.view.Choreographer/' "$f"
+            echo "Import corrigido em $f"
+          done
       - name: Compilar Debug
         if: env.BUILD_DEBUG == 'true'
-        run: |
-          cd "$PROJECT_DIR"
-          bash /tmp/gb.sh assembleDebug debug
-      - name: Compilar Release
-        if: env.BUILD_RELEASE == 'true'
-        run: |
-          cd "$PROJECT_DIR"
-          bash /tmp/gb.sh assembleRelease release
-      - name: Coletar APKs
-        if: always()
-        run: |
-          set +e +o pip
+       
