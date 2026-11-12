@@ -26,7 +26,6 @@ env:
   UPSTREAM_REF: main
 jobs:
   build:
-    name: Verificar, corrigir e compilar
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     defaults:
@@ -48,10 +47,10 @@ jobs:
           mkdir -p "$REPORT_DIR" "$SRC_ROOT"
           : > "$REPORT_DIR/problems.txt"
           : > "$REPORT_DIR/fixed.txt"
-      - name: "Verificação 1/4 - juntar Cat__NN.zip/.bin, extrair e testar"
+      - name: "V1 juntar partes Cat__NN"
         run: |
           set -uo pipefail
-          PARTS_EXPECTED=29    # quantidade de arquivos Cat__NN (.zip ou .bin)
+          PARTS_EXPECTED=29
           : > "$REPORT_DIR/zips.txt"
           mapfile -t parts < <(
             find "$GITHUB_WORKSPACE" -type f -iregex '.*/Cat__[0-9]+\.\(bin\|zip\)' -not -path '*/.git/*' 2>/dev/null \
@@ -59,7 +58,6 @@ jobs:
           )
           found=${#parts[@]}
           echo "Partes encontradas: $found"
-          printf '%s\n' "${parts[@]}"
           if [ "$found" -ne "$PARTS_EXPECTED" ]; then
             echo "::error::Esperava $PARTS_EXPECTED partes (Cat__NN), encontrei $found"
             exit 1
@@ -67,42 +65,11 @@ jobs:
           for p in "${parts[@]}"; do
             [ "$(stat -c %s "$p")" -gt 1024 ] || { echo "::error::Parte vazia ou ponteiro LFS: $p"; exit 1; }
           done
-          echo "== Diagnóstico das partes (nome, tamanho, 4 primeiros bytes) =="
-          for p in "${parts[@]}"; do
-            echo "$(basename "$p")  $(stat -c %s "$p") bytes  inicio:$(head -c4 "$p" | od -An -tx1)"
-          done
-          mkdir -p /tmp/cats
           cat "${parts[@]}" > /tmp/ehsb.zip
-          echo "ehsb.zip montado: $(stat -c %s /tmp/ehsb.zip) bytes"
-          if [ "$(head -c2 /tmp/ehsb.zip)" = "PK" ] && unzip -tqq /tmp/ehsb.zip >/dev/null 2>&1; then
-            echo "Método 1 OK: as partes concatenadas formam um zip válido"
-            unzip -oq /tmp/ehsb.zip -d /tmp/cats
-          else
-            echo "::warning::Concatenação simples inválida; testando outros métodos"
-            indep=0
-            for p in "${parts[@]}"; do
-              if unzip -tqq "$p" >/dev/null 2>&1; then indep=$((indep+1)); else echo "Parte não é zip válido sozinha: $(basename "$p")"; fi
-            done
-            if [ "$indep" -eq "$found" ]; then
-              echo "Método 2: cada parte é um zip independente; extraindo todas"
-              for p in "${parts[@]}"; do unzip -oq "$p" -d /tmp/cats; done
-            else
-              echo "Método 3: tentando zip dividido (.z01, .z02 ... .zip)"
-              rm -rf /tmp/sp; mkdir -p /tmp/sp
-              i=0
-              for p in "${parts[@]}"; do
-                i=$((i+1))
-                if [ "$i" -lt "$found" ]; then cp "$p" "/tmp/sp/ehsb.z$(printf '%02d' "$i")"; else cp "$p" /tmp/sp/ehsb.zip; fi
-              done
-              if zip -s 0 /tmp/sp/ehsb.zip --out /tmp/ehsb_joined.zip >/dev/null 2>&1 && unzip -tqq /tmp/ehsb_joined.zip >/dev/null 2>&1; then
-                echo "Método 3 OK"
-                unzip -oq /tmp/ehsb_joined.zip -d /tmp/cats
-              else
-                echo "::error::Nenhum método conseguiu montar o zip. Veja o diagnóstico acima: alguma parte está truncada, faltando ou fora de ordem."
-                exit 1
-              fi
-            fi
+          if [ "$(head -c2 /tmp/ehsb.zip)" != "PK" ] || ! unzip -tqq /tmp/ehsb.zip >/dev/null 2>&1; then
+            echo "::error::ehsb.zip inválido"; ls -l "${parts[@]}" | awk '{print $5,$9}'; exit 1
           fi
+          mkdir -p /tmp/cats && unzip -oq /tmp/ehsb.zip -d /tmp/cats
           mapfile -t inner < <(find /tmp/cats -type f -iname '*.zip' | sort -V)
           total=${#inner[@]}
           ok=0
@@ -118,7 +85,7 @@ jobs:
           else
             echo "DIRECT_SRC=1" >> "$GITHUB_ENV"
           fi
-      - name: "Verificação 2/4 - extrair para estrutura organizada e detectar conflitos"
+      - name: "V2 extrair estrutura"
         run: |
           set -uo pipefail
           if [ "${DIRECT_SRC:-0}" = 1 ]; then
@@ -132,7 +99,7 @@ jobs:
             d=$(find "$SRC_ROOT" -mindepth 1 -maxdepth 1)
             shopt -s dotglob; mv "$d"/* "$SRC_ROOT"/; rmdir "$d"
           fi
-      - name: "Completar arquivos faltantes a partir do repositório original"
+      - name: "Completar arquivos faltantes"
         run: |
           set -eu
           [ -d /tmp/upstream ] || git clone --depth 1 --branch "$UPSTREAM_REF" https://github.com/ZalithLauncher/ZalithLauncher2.git /tmp/upstream
@@ -150,7 +117,7 @@ jobs:
             fi
             if [ -f "$SRC_ROOT/gradlew" ]; then chmod +x "$SRC_ROOT/gradlew"; fi
           fi
-      - name: "Verificação 3/4 - identificar a estrutura real do projeto Android"
+      - name: "V3 achar projeto Android"
         run: |
           base64 -d <<'B64' | gunzip | python3 -
           H4sIAAAAAAACA51Y607jShL+76dotVbCZsDA/NlzzMlBnIHDcCCAAjNaKcmJOnE7GHyT2wkZZfIwq/2xDzCPwIvtV93txAlZ9hKJxF2uqq6q/urSxGmRlxXL1R4r5R5T3/AwTvKho8oRa4Huy2wal3nW5fedT4PO7e0D7x+Dt9h42zm/u+08DM4uO7zv3F9d3uH9nA8ncRLyPcb9cSnCRJrHuKLfLA/lIM3DSSKVpo9mM/qtRDmWFV84oYzYi0ie3aFQ0gschk+UlyzcYyHMjBSLM7Jhk4c+oeoGfZjQnWmR
@@ -165,15 +132,15 @@ jobs:
           6yA1L/08YDb7Tu/uBnenD5/N3GznK001bPUZGRUXndOz6/PB1/PO/eXtDV6Pp8R9cdcgUYugcn9CgzBiNmifXhIdUHHrmHlWH/xtSDYd1jMLAmFGAlL1+fR+0Ply/2BV1W56fpK/yNJtqmxf1T6l6xrTlULD3b49+wKHPt1+uakVN++aULpwqE2Ycb/5r72Ly4fPX34bnN985X0z8TPk3njVeZ6p7yHLIbG8grKxvRbg4vC8aM2ni+WAX7/RIbu+vH/45ZfB4Pz298EALPYqYJKHjHwyveiJNqAGYi8LKwnP
           +RdzGZ//xRQAAA==
           B64
-      - name: "Verificação 4/4 - correção automática"
+      - name: "V4 correção automática"
         run: |
           set -uo pipefail
           cd "${PROJECT_DIR:?}" && : "${APP_DIR:?}"
           chmod +x gradlew
           cat > /tmp/gb.sh <<'S'
           cd "$PROJECT_DIR"
-          e() { L="$REPORT_DIR/build-$2.log"; grep -E '^e: ' "$L" | head -15; grep -A6 -m1 "What went wrong" "$L" | head -8; grep -vE '^ +(Compiling|Downloaded|Downloading) ' "$L" | grep -E -A12 -m6 '^ *error(\[E[0-9]+\])?:|panicked at|could not compile|linker|ld: ' | head -60; }
-          f() { e "$@" > "$REPORT_DIR/erros-$2.txt"; { echo "### Erros em $1"; echo '```'; cat "$REPORT_DIR/erros-$2.txt"; echo '```'; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; e "$@"; echo "===== ULTIMAS 250 LINHAS DO LOG ====="; grep -vE '^ +(Compiling|Downloaded|Downloading) ' "$REPORT_DIR/build-$2.log" | tail -n 250; echo "::error title=Falha em $1::$(e "$@" | sed ':a;N;$!ba;s/\n/%0A/g')"; }
+          e() { L="$REPORT_DIR/build-$2.log"; grep -E '^e: ' "$L" | head -15; grep -A6 -m1 "What went wrong" "$L"; grep -E -A9 -m5 '^ *error(\[E[0-9]+\])?:|panicked' "$L" | head -50; }
+          f() { e "$@" > "$REPORT_DIR/erros-$2.txt"; tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}" < "$REPORT_DIR/erros-$2.txt"; echo "::error title=Falha em $1::$(sed ':a;N;$!ba;s/\n/%0A/g' "$REPORT_DIR/erros-$2.txt")"; }
           for i in 1 2 3 4 5; do
             if ./gradlew "${APP_PATH}:$1" -I /tmp/oi.gradle --no-daemon -q --console=plain > "$REPORT_DIR/build-$2.log" 2>&1; then echo "Build $1 OK"; exit 0; fi
             c=0
@@ -243,7 +210,7 @@ jobs:
         if: env.NDK_VERSION != ''
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "ndk;${NDK_VERSION}" 2>&1 | tee "$REPORT_DIR/ndk.log"
+          sdkmanager "ndk;${NDK_VERSION}"
           for v in ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK; do
             echo "$v=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
           done
@@ -263,7 +230,7 @@ jobs:
             r=false
           fi
           echo "BUILD_DEBUG=$d" >> "$GITHUB_ENV"; echo "BUILD_RELEASE=$r" >> "$GITHUB_ENV"
-      - name: Trocar nome e ícone do app (Cat Launcher)
+      - name: Nome e ícone do app
         run: |
           cd "$PROJECT_DIR"; P="$APP_DIR/gradle.properties"; touch "$P"
           sed -i -E '/^launcher_(app_)?name=/d' "$P"
@@ -296,13 +263,13 @@ jobs:
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
-      - name: Corrigir import kotlinx.coroutines.cancel (FastStartupLoader)
+      - name: Corrigir import FastStartupLoader
         run: |
           F=$(find "$SRC_ROOT" -type f -name FastStartupLoader.kt | head -1)
           if [ -n "$F" ] && ! grep -q '^import kotlinx.coroutines.cancel$' "$F"; then
             sed -i '0,/^import /s//import kotlinx.coroutines.cancel\nimport /' "$F"
           fi
-      - name: Preparar Rust (targets, cargo-ndk, Cargo.lock)
+      - name: Preparar Rust
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           T=$(find "$SRC_ROOT" -name Cargo.toml -not -path '*/target/*')
@@ -321,6 +288,17 @@ jobs:
             sed -i "s/) -> impl FnMut(&str) -> bool + 'a {/) -> impl FnMut(\&str) -> bool + 'a + use<'a, 'l, 'o> {/" "$J"
             grep -n "use<'a" "$J"
           fi
+      - name: Diagnóstico Rust
+        continue-on-error: true
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          for t in $(find "$SRC_ROOT" -name Cargo.toml -not -path '*/target/*'); do
+            grep -q '^\[package\]' "$t" || continue
+            d=$(dirname "$t"); L="$REPORT_DIR/rust.log"
+            (cd "$d" && cargo ndk -t arm64-v8a build --message-format short >"$L" 2>&1) && { echo "Rust OK: $d"; continue; }
+            { echo "### Erros do Rust"; grep -E 'error|panicked' "$L" | head -40; } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          done
       - name: Compilar Debug
         if: env.BUILD_DEBUG == 'true'
         run: |
@@ -338,4 +316,34 @@ jobs:
           mkdir -p /tmp/apks
           P="$PROJECT_DIR"
           if [ -z "$P" ]; then P=.; fi
-          find "$P" -type f -name
+          find "$P" -type f -name '*.apk' -path '*/build/outputs/apk/*' 2>/dev/null > /tmp/apklist.txt
+          while read -r f; do
+            [ -n "$f" ] || continue
+            name=$(basename "$f")
+            if [ "$ARCH" != "all" ]; then
+              case "$name" in
+                *"$ARCH"*|*universal*) ;;
+                *) continue ;;
+              esac
+            fi
+            cp "$f" "/tmp/apks/$name"
+          done < /tmp/apklist.txt
+          ls -lh /tmp/apks
+          if [ -z "$(ls -A /tmp/apks 2>/dev/null)" ]; then
+            echo "::warning::Nenhum APK gerado."
+          fi
+          exit 0
+      - name: Publicar APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cat Launcher
+          path: /tmp/apks/*.apk
+          if-no-files-found: warn
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Logs
+          path: /tmp/zreport/*
+          
