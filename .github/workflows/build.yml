@@ -45,8 +45,6 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
           mkdir -p "$REPORT_DIR" "$SRC_ROOT"
-          : > "$REPORT_DIR/problems.txt"
-          : > "$REPORT_DIR/fixed.txt"
       - name: "V1 juntar partes Cat__NN"
         run: |
           set -uo pipefail
@@ -57,7 +55,6 @@ jobs:
               | sed -E 's#.*/Cat__0*([0-9]+)\.(bin|zip)$#\1\t&#I' | sort -n | cut -f2-
           )
           found=${#parts[@]}
-          echo "Partes encontradas: $found"
           if [ "$found" -ne "$PARTS_EXPECTED" ]; then
             echo "::error::Esperava $PARTS_EXPECTED partes (Cat__NN), encontrei $found"
             exit 1
@@ -70,7 +67,6 @@ jobs:
           if [ "$(head -c2 /tmp/ehsb.zip)" = PK ] && unzip -tqq /tmp/ehsb.zip >/dev/null 2>&1; then
             unzip -oq /tmp/ehsb.zip -d /tmp/cats
           else
-            echo "Partes são zips independentes; extraindo cada uma"
             for p in "${parts[@]}"; do
               unzip -oq "$p" -d /tmp/cats; [ $? -le 1 ] || { echo "::error::Parte inválida: $p"; exit 1; }
             done
@@ -109,16 +105,13 @@ jobs:
           set -eu
           [ -d /tmp/upstream ] || git clone --depth 1 --branch "$UPSTREAM_REF" https://github.com/ZalithLauncher/ZalithLauncher2.git /tmp/upstream
           if [ ! -f "$SRC_ROOT/settings.gradle.kts" ] && [ ! -f "$SRC_ROOT/settings.gradle" ]; then
-            echo "Raiz do Gradle ausente nos ZIPs; completando do repositório original (ref: $UPSTREAM_REF)."
             for f in settings.gradle.kts build.gradle.kts gradle.properties gradlew gradlew.bat; do
               if [ -f "/tmp/upstream/$f" ] && [ ! -f "$SRC_ROOT/$f" ]; then
                 cp "/tmp/upstream/$f" "$SRC_ROOT/$f"
-                echo "Completado da raiz original: $f"
               fi
             done
             if [ -d /tmp/upstream/gradle ] && [ ! -d "$SRC_ROOT/gradle" ]; then
               cp -r /tmp/upstream/gradle "$SRC_ROOT/gradle"
-              echo "Completado da raiz original: pasta gradle/"
             fi
             if [ -f "$SRC_ROOT/gradlew" ]; then chmod +x "$SRC_ROOT/gradlew"; fi
           fi
@@ -145,7 +138,6 @@ jobs:
           cat > /tmp/gb.sh <<'S'
           cd "$PROJECT_DIR"
           FIXLOG="$REPORT_DIR/autofix.log"; : > "$FIXLOG"
-          # mostra só o erro real (sem avisos "w:", sem ruído), no máximo 6 linhas
           e() {
             L="$REPORT_DIR/build-$2.log"
             {
@@ -162,7 +154,6 @@ jobs:
             sed -nE 's#^e: file://([^:]+):.*Unclosed comment.*#\1#p' "$REPORT_DIR/build-$2.log" | sort -u | while read -r k; do cp "$k" "$REPORT_DIR/"; done
             echo "ERRO REAL em $1:"
             cat "$REPORT_DIR/erros-$2.txt"
-            { echo "### Erro em $1"; echo '```'; cat "$REPORT_DIR/erros-$2.txt"; echo '```'; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             echo "::error title=Falha em $1::$(head -3 "$REPORT_DIR/erros-$2.txt" | tr '\n' '|' | cut -c1-400)"
           }
           for i in 1 2 3 4 5; do
@@ -194,15 +185,7 @@ jobs:
           cat > /tmp/oi.gradle <<'O'
           allprojects { tasks.matching { it.class.name.contains('KotlinCompile') }.configureEach { t ->
             try {
-              t.compilerOptions.optIn.addAll([
-                'androidx.compose.material3.ExperimentalMaterial3Api',
-                'androidx.compose.material3.ExperimentalMaterial3ExpressiveApi',
-                'androidx.compose.foundation.ExperimentalFoundationApi',
-                'androidx.compose.foundation.layout.ExperimentalLayoutApi',
-                'androidx.compose.animation.ExperimentalAnimationApi',
-                'androidx.compose.ui.ExperimentalComposeUiApi',
-                'androidx.compose.animation.ExperimentalSharedTransitionApi'
-              ])
+              t.compilerOptions.optIn.addAll(['androidx.compose.material3.ExperimentalMaterial3Api','androidx.compose.material3.ExperimentalMaterial3ExpressiveApi','androidx.compose.foundation.ExperimentalFoundationApi','androidx.compose.foundation.layout.ExperimentalLayoutApi','androidx.compose.animation.ExperimentalAnimationApi','androidx.compose.ui.ExperimentalComposeUiApi','androidx.compose.animation.ExperimentalSharedTransitionApi'])
             } catch (e) {}
           } }
           O
@@ -218,7 +201,7 @@ jobs:
           if [ -f "$W/jre-25-universal.tar.xz" ]; then
             cp "$W/jre-25-universal.tar.xz" "$A/jre-25/universal.tar.xz"
           else
-            ls "$W"/jre-25-universal.tar.xz.part* >/dev/null || { echo "::error::jre-25 (ou .part00/.part01) ausente na raiz"; exit 1; }
+            ls "$W"/jre-25-universal.tar.xz.part* >/dev/null || { echo "::error::jre-25 ausente na raiz"; exit 1; }
             cat "$W"/jre-25-universal.tar.xz.part* > "$A/jre-25/universal.tar.xz"
           fi
           xz -t "$A/jre-21/universal.tar.xz" "$A/jre-25/universal.tar.xz"
@@ -238,11 +221,8 @@ jobs:
       - name: Instalar NDK
         if: env.NDK_VERSION != ''
         run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "ndk;${NDK_VERSION}"
-          for v in ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK; do
-            echo "$v=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
-          done
+          for v in ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK; do echo "$v=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"; done
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Decidir tipos de build
@@ -280,14 +260,13 @@ jobs:
           for d,s in dict(mdpi=48,hdpi=72,xhdpi=96,xxhdpi=144,xxxhdpi=192).items():
            os.makedirs(R+"mipmap-"+d,exist_ok=True)
            for n in ("ic_launcher","ic_launcher_round"): open(f"{R}mipmap-{d}/{n}.png","wb").write(png(s))
-          print("icones criados em",R,len(glob.glob(R+"mipmap-*/ic_launcher.png")))
           P
       - name: Criar keystore de debug ausente
         run: |
           cd "$PROJECT_DIR"
           F="$APP_DIR/zalith_launcher_debug.jks"
           if [ ! -f "$F" ]; then
-            keytool -genkeypair -v -keystore "$F" -storetype JKS \
+            keytool -genkeypair -keystore "$F" -storetype JKS \
               -alias androiddebugkey -storepass android -keypass android \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
@@ -315,7 +294,6 @@ jobs:
           J=$(find "$SRC_ROOT" -name jni_bridge.rs | head -1)
           if [ -n "$J" ] && ! grep -q "use<'a, 'l, 'o>" "$J"; then
             sed -i "s/) -> impl FnMut(&str) -> bool + 'a {/) -> impl FnMut(\&str) -> bool + 'a + use<'a, 'l, 'o> {/" "$J"
-            grep -n "use<'a" "$J"
           fi
       - name: Corrigir comentários Kotlin
         run: |
@@ -349,9 +327,20 @@ jobs:
             fi
             cp "$f" "/tmp/apks/$name"
           done < /tmp/apklist.txt
-          ls -lh /tmp/apks
           if [ -z "$(ls -A /tmp/apks 2>/dev/null)" ]; then
             echo "::warning::Nenhum APK gerado."
           fi
           exit 0
-      - name: Public
+      - name: Publicar APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cat Launcher
+          path: /tmp/apks/*.apk
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Logs
+          path: /tmp/zreport/*
+          
