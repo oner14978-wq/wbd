@@ -186,6 +186,18 @@ jobs:
         H4sIAAAAAAACA4XOy2rDMBCF4b2f4tSYuIXIbtehq4KhEAgk3fWGkEb1EFtSpAmkkIePqZtl6Xb4z8dkEigKiBzJaR6K7rG6dewtymq3ffrcbjYvJZR8R4KD8nokdDrLTnSSY1wHbSk1e8EZPWkL9XBXsMPrlE5CV+IdiwVu8JUoQh1Qf/AYQxLsgwzsT40JKRyFPeXGaG9oqOqf4QrSky+ATJPKqO+X7XXb5rb9j3nz13j2JolMH1A+z2dt2XDw2gbQiDmYn/So/8R/LcfFBU7Jb4w5AQAA
         ZZ
         bash /tmp/s19.sh
+    - name: Diagnóstico (onde estão LaunchProbes/LaunchRun/LaunchStage/BenchmarkReport)
+      continue-on-error: true
+      run: |
+        cd "$SRC_ROOT"
+        for n in LaunchProbes LaunchRun LaunchStage BenchmarkReport; do
+          echo "== $n"
+          grep -rnE "(class|object|interface|typealias)[[:space:]]+$n\b" --include=*.kt . | grep -v /build/ || echo "NAO DECLARADO EM NENHUM .kt"
+        done
+        echo "== pasta startup"
+        for d in $(find . -type d -path '*/zalithlauncher/startup' -not -path '*/build/*'); do ls -la "$d"; done
+        echo "== arquivos alterados pelo reparo de comentarios"
+        grep -rl '/(\*)' --include=*.kt . | grep -v /build/ || echo "nenhum"
     - name: Compilar Debug
       if: env.BUILD_DEBUG == 'true'
       run: |
