@@ -154,8 +154,8 @@ jobs:
           chmod +x gradlew
           cat > /tmp/gb.sh <<'S'
           cd "$PROJECT_DIR"
-          e() { grep -E '^e: ' "$REPORT_DIR/build-$2.log" | head -40; grep -A14 -m1 "What went wrong" "$REPORT_DIR/build-$2.log" | head -16; }
-          f() { echo "::group::ERROS DO BUILD ($1)"; e "$@"; echo "--- ultimas 60 linhas do log ---"; tail -n 60 "$REPORT_DIR/build-$2.log"; echo "::endgroup::"; { echo "### Falha em $1"; echo '```'; e "$@"; tail -n 30 "$REPORT_DIR/build-$2.log"; echo '```'; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; echo "::error title=Falha em $1::$(e "$@" | head -8 | sed ':a;N;$!ba;s/\n/%0A/g')"; }
+          e() { grep -E '^e: ' "$REPORT_DIR/build-$2.log" | sed -n '1,40p'; grep -A14 -m1 "What went wrong" "$REPORT_DIR/build-$2.log" | head -16; }
+          f() { echo "::group::ERROS DO BUILD ($1)"; e "$@"; echo "--- ultimas 60 linhas do log ---"; tail -n 60 "$REPORT_DIR/build-$2.log"; echo "::endgroup::"; { echo "### Falha em $1"; echo '```'; e "$@"; tail -n 30 "$REPORT_DIR/build-$2.log"; echo '```'; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; echo "::error title=Falha em $1::$(e "$@" | sed -n '1,8p' | sed ':a;N;$!ba;s/\n/%0A/g')"; }
           for i in 1 2 3 4 5; do
             if ./gradlew "${APP_PATH}:$1" -I /tmp/oi.gradle --no-daemon -q --console=plain > "$REPORT_DIR/build-$2.log" 2>&1; then echo "Build $1 OK"; exit 0; fi
             c=0
@@ -168,7 +168,7 @@ jobs:
                 grep -q "\"$n\"" "$X" || { sed -i "s#</resources>#<string name=\"$n\">${n//_/ }</string>\n</resources>#" "$X"; c=1; echo "String criada: $n"; }
                 continue
               fi
-              [ -n "$r" ] || { echo "SEM PADRAO: ${s:0:100}"; continue; }
+              [ -n "$r" ] || continue
               mkdir -p "$APP_DIR/src/main/res/$r"
               echo '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#888" android:pathData="M24,24m-20,0a20,20 0 1,1 40,0a20,20 0 1,1 -40,0"/></vector>' > "$APP_DIR/src/main/res/$r/$n.xml"
               c=1; echo "Placeholder criado: $r/$n"
@@ -259,6 +259,52 @@ jobs:
         continue-on-error: true
         run: |
           cd "$SRC_ROOT/CatCore/rust" && sed -i 's/^use crate::{batch, hash, launch, manifest, plan,/use crate::{batch, hash, launch, manifest, perf, verify, plan,/' src/jni_bridge.rs && grep -n '^use crate' src/jni_bridge.rs && cargo ndk --platform 26 -t arm64-v8a build --release 2>&1 | grep -E -A12 '^error' | head -60
+      - name: Reparar comentarios Kotlin nao fechados (startup)
+        run: |
+          python3 - <<'PY'
+          import os,sys
+          root=os.environ["SRC_ROOT"]
+          def fix(t):
+              out=[];i=0;n=len(t);d=0;ch=0
+              while i<n:
+                  c=t[i:i+2]
+                  if d>0:
+                      if c=="*/": d=0; out.append("*/"); i+=2
+                      elif c=="/*": out.append("/(*)"); ch+=1; i+=2
+                      else: out.append(t[i]); i+=1
+                      continue
+                  if t.startswith('"""',i):
+                      j=t.find('"""',i+3); j=n if j<0 else j+3
+                      out.append(t[i:j]); i=j
+                  elif t[i]=='"':
+                      j=i+1
+                      while j<n and t[j]!='"' and t[j]!="\n":
+                          j+=2 if t[j]=="\\" else 1
+                      out.append(t[i:j+1]); i=j+1
+                  elif t[i]=="'":
+                      j=i+1
+                      while j<n and t[j]!="'" and t[j]!="\n":
+                          j+=2 if t[j]=="\\" else 1
+                      out.append(t[i:j+1]); i=j+1
+                  elif c=="//":
+                      j=t.find("\n",i); j=n if j<0 else j
+                      out.append(t[i:j]); i=j
+                  elif c=="/*": d=1; out.append("/*"); i+=2
+                  else: out.append(t[i]); i+=1
+              r="".join(out)
+              if d>0: r+="\n*/\n"; ch+=1
+              return r,ch
+          for dp,_,fs in os.walk(root):
+              if "/build/" in dp+"/" or "/startup" not in dp: continue
+              for f in fs:
+                  if not f.endswith(".kt"): continue
+                  p=os.path.join(dp,f)
+                  t=open(p,encoding="utf-8",errors="replace").read()
+                  r,ch=fix(t)
+                  if ch:
+                      open(p,"w",encoding="utf-8").write(r)
+                      print("Reparado:",p,"alteracoes:",ch)
+          PY
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Decidir tipos de build
@@ -293,43 +339,4 @@ jobs:
           P=os.environ["PROJECT_DIR"]+"/**/src/*/res/"
           for f in glob.glob(P+"mipmap-*/ic_launcher*",recursive=True)+glob.glob(P+"drawable*/ic_launcher_foreground.*",recursive=True): os.remove(f); print("removido",f)
           os.makedirs(R+"drawable-nodpi",exist_ok=True); open(R+"drawable-nodpi/ic_launcher_foreground.png","wb").write(png(192))
-          for d,s in dict(mdpi=48,hdpi=72,xhdpi=96,xxhdpi=144,xxxhdpi=192).items():
-           os.makedirs(R+"mipmap-"+d,exist_ok=True)
-           for n in ("ic_launcher","ic_launcher_round"): open(f"{R}mipmap-{d}/{n}.png","wb").write(png(s))
-          print("icones criados em",R,len(glob.glob(R+"mipmap-*/ic_launcher.png")))
-          P
-      - name: Criar keystore de debug ausente
-        run: |
-          cd "$PROJECT_DIR"
-          F="$APP_DIR/zalith_launcher_debug.jks"
-          if [ ! -f "$F" ]; then
-            keytool -genkeypair -v -keystore "$F" -storetype JKS \
-              -alias androiddebugkey -storepass android -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
-      - name: Corrigir import kotlinx.coroutines.cancel (FastStartupLoader)
-        run: |
-          F=$(find "$SRC_ROOT" -type f -name FastStartupLoader.kt | head -1)
-          if [ -n "$F" ] && ! grep -q '^import kotlinx.coroutines.cancel$' "$F"; then
-            sed -i '0,/^import /s//import kotlinx.coroutines.cancel\nimport /' "$F"
-            echo "Import adicionado em $F"
-            grep -n 'import kotlinx.coroutines' "$F"
-          fi
-      - name: Compilar Debug
-        if: env.BUILD_DEBUG == 'true'
-        run: |
-          cd "$PROJECT_DIR"
-          bash /tmp/gb.sh assembleDebug debug
-      - name: Diagnostico (BenchmarkReport e erro 127)
-        if: failure()
-        continue-on-error: true
-        run: |
-          set +e
-          cd "$PROJECT_DIR"
-          echo "=== grep BenchmarkReport ==="
-          grep -rn "BenchmarkReport" --include=*.kt --include=*.java --include=*.rs --include=*.kts . 2>/dev/null | head -30
-          echo "=== GameLaunchFlow.kt (1-25 e 50-70) ==="
-          F=$(find . -name GameLaunchFlow.kt | head -1); echo "$F"
-          sed -n '1,25p;50,70p' "$F"
-          echo "=== command not found / No such file =
+     
