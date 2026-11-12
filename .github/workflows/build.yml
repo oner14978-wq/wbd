@@ -321,29 +321,20 @@ jobs:
         run: |
           cd "$PROJECT_DIR"
           bash /tmp/gb.sh assembleDebug debug
-      - name: Compilar Release
-        if: env.BUILD_RELEASE == 'true'
+      - name: Diagnostico (BenchmarkReport e erro 127)
+        if: failure()
+        continue-on-error: true
         run: |
+          set +e
           cd "$PROJECT_DIR"
-          bash /tmp/gb.sh assembleRelease release
-      - name: Coletar APKs
-        if: always()
-        run: |
-          set +e +o pipefail
-          mkdir -p /tmp/apks
-          P="$PROJECT_DIR"
-          if [ -z "$P" ]; then P=.; fi
-          find "$P" -type f -name '*.apk' -path '*/build/outputs/apk/*' 2>/dev/null > /tmp/apklist.txt
-          while read -r f; do
-            [ -n "$f" ] || continue
-            name=$(basename "$f")
-            if [ "$ARCH" != "all" ]; then
-              case "$name" in
-                *"$ARCH"*|*universal*) ;;
-                *) continue ;;
-              esac
-            fi
-            cp "$f" "/tmp/apks/$name"
-          done < /tmp/apklist.txt
-          ls -lh /tmp/apks
-          f
+          echo "=== grep BenchmarkReport ==="
+          grep -rn "BenchmarkReport" --include=*.kt --include=*.java --include=*.rs --include=*.kts . 2>/dev/null | head -30
+          echo "=== GameLaunchFlow.kt (1-25 e 50-70) ==="
+          F=$(find . -name GameLaunchFlow.kt | head -1); echo "$F"
+          sed -n '1,25p;50,70p' "$F"
+          echo "=== command not found / No such file ==="
+          grep -n -B3 -A3 -E "command not found|No such file" "$REPORT_DIR"/*.log 2>/dev/null | head -40
+          echo "=== erros e: ==="
+          grep -h -E '^e: ' "$REPORT_DIR"/build-*.log 2>/dev/null | head -20
+      - name: Compilar Release
+        if: env.BUILD_RELEASE == 'tr
