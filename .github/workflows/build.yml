@@ -50,88 +50,41 @@ jobs:
           : > "$REPORT_DIR/fixed.txt"
       - name: "Verificação 1/4 - localizar e testar os arquivos ZIP"
         run: |
-          set -uo pipefail
-          ZIPS=($(seq 1 29))
-          expected=${#ZIPS[@]}; found=0; ok=0
-          : > "$REPORT_DIR/zips.txt"
-          find_one() {
-            find "$GITHUB_WORKSPACE" -type f \( -iname "Cat$1.zip" -o -iname "Cat$(printf '%02d' "$1").zip" -o -iname "Cat__$(printf '%02d' "$1").zip" \) -not -path '*/.git/*' 2>/dev/null \
-              | awk '{ print length($0) "\t" $0 }' | sort -n | cut -f2-
-          }
-          for n in "${ZIPS[@]}"; do
-            mapfile -t hits < <(find_one "$n")
-            if [ "${#hits[@]}" -eq 0 ]; then
-              echo "::error::ZIP número $n ausente no repositório (esperado Cat$n.zip)"
-              continue
-            fi
-            found=$((found+1))
-            f="${hits[0]}"
-            size=$(stat -c %s "$f")
-            magic=$(head -c2 "$f" 2>/dev/null)
-            if [ "$size" -lt 1024 ] || [ "$magic" != "PK" ]; then
-              echo "::error::$f não é um ZIP válido (tamanho=$size)"
-              continue
-            fi
-            if ! unzip -tqq "$f" >/dev/null 2>&1; then
-              echo "::error::Falha no teste de integridade: $f"
-              continue
-            fi
-            echo "$f" >> "$REPORT_DIR/zips.txt"
-            ok=$((ok+1))
-          done
-          {
-            echo "ZIPS_EXPECTED=$expected"
-            echo "ZIPS_FOUND=$found"
-            echo "ZIPS_OK=$ok"
-          } >> "$GITHUB_ENV"
-          [ "$ok" -eq "$expected" ] || { echo "::error::Nem todos os ZIPs passaram na verificação."; exit 1; }
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA31TwU7bQBC9+ysei2lsqhAn6qUJRm1paBESiQK0VQmKVvE6WcXeNfaaUkI+puqh6rm3XvNjHW9KCwiQomi9M/vmzXszhTColx
+          qZzETMZeJ83u8fhZ7rFeIcTbRe+r4jLjMxNiIK3fl6FT59dbboINalisKgAz0LA6eNHTB30O33Bsejt/uDxpXMii1zaZgTSxWNtBKej7kDVJ+U
+          +m7/+P3Jm9HH3uDgqP96t8tQN18zgRhDD3WpeCrAdrlxm1sERVF959bLcqlMjNpG0IpqhNdk/kOJo9ETqUMfdaVJgIybKWqbja2JNI3NGlo7jU
+          hcNFSZJBgSZ+Aa/MsMtTksGBKhJmbquYEPNjQMboBFjZIKnROcotO4pEPcqjsLJ9Y5FKSi0vMb/VgHkSbklGexTAQ1j6k0Bbax7d0IRvmK+ZQk
+          Y5xWj9erFPsadbInwFkHZiqUZSjGUw3Wbos813m7TYWglr9TkWu4CrwshDICSiMXmS6kWf7KpYYnikzkPNKoVFWVLj6zeGOtjFSlsJZVf9Zv1/
+          Ps4XnTr5jFIdGyrAJiRReFvBKUVBhO7Y+xURDv2DaR8okcU2gqeEShlg3cVvpWpxUK9ZgYNIPWC5zh+treWwyGtRCsf8Ceat+NqfvvGsufKFNU
+          YlwsvyWS+vQMT7ma6tBWeaRZ4rGGUpEa5Mz5+YrrraFo7TxrPl58jydTXkltREGaR4LMN2KSy4hHog3CerDoCsVWenSZUK0bmaBn1oGIxsSZ/3
+          tbTdeo+6nf3T3uvg3dm8VldxP2eieHFLU+3gv1DkJXz5izWFH4u6Tdww/MqfSnkJ089h96Zc78vgSHIoXRkS5AP4IukPGi4DlPoTguRC5jOebL
+          H+TRFu2CuJTkdQeLPxsB3qmQBAAA
+          B
+          bash -eo pipefail /tmp/s.sh
       - name: "Verificação 2/4 - extrair para estrutura organizada e detectar conflitos"
         run: |
-          set -uo pipefail
-          while IFS= read -r z; do
-            echo "Extraindo $z"
-            unzip -oq "$z" -d "$SRC_ROOT" || echo "::error::Falha ao extrair $z"
-          done < "$REPORT_DIR/zips.txt"
-          # se tudo veio dentro de uma única pasta raiz, sobe um nível
-          n=$(find "$SRC_ROOT" -mindepth 1 -maxdepth 1 | wc -l)
-          if [ "$n" -eq 1 ] && [ -d "$(find "$SRC_ROOT" -mindepth 1 -maxdepth 1)" ]; then
-            d=$(find "$SRC_ROOT" -mindepth 1 -maxdepth 1)
-            echo "Subindo conteúdo de $d"
-            shopt -s dotglob; mv "$d"/* "$SRC_ROOT"/; rmdir "$d"
-          fi
-          echo "Conteúdo de $SRC_ROOT:"; ls -la "$SRC_ROOT" | head -60
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA5WSz07CQBDG732KLyshYqzoxUMrJ4SEE6Z4M4Qs3a3dpN0tu1sgDa/kC3DlxZxWMXLT007mz29mvlknPcLaoFKVzLgqgl2uCo
+          nZdDGClVwgtGhiCBMAMs0N2GTvLVdaGPQaRt5aN6pCaDZg5EAo6F0k41Uyn78yHA7fZVEkrTU2iqa8yDm4gexAtsMIoyWeqDKZvMyT19XzLBkS
+          1t35vWfBFZyEr6nlVioDIbW37YO65DgdtUo5Ku48BwGbWzizbmPQp4+tLAI96l1nNPHFYGFJHln5HA9k8/3ZPmCXIiwGgcrwRhWaUuWGAkv0++
+          Tp9vszbsCwjOFzqUkp8Y85Bj96L+p1p3ZqtJeno+gW74lWepebis7n6Dz+vTDrGOWW4IINb373GMawpSCl21CQqeALPL4AnrMjFqNwpAC/vCPy
+          7jc83n8CDfjzvDICAAA=
+          B
+          bash -eo pipefail /tmp/s.sh
       - name: "Completar arquivos faltantes a partir do repositório original"
         run: |
-          set -eu
-          [ -d /tmp/upstream ] || git clone --depth 1 --branch "$UPSTREAM_REF" https://github.com/ZalithLauncher/ZalithLauncher2.git /tmp/upstream
-          if [ ! -f "$SRC_ROOT/settings.gradle.kts" ] && [ ! -f "$SRC_ROOT/settings.gradle" ]; then
-            echo "Raiz do Gradle ausente nos ZIPs; completando do repositório original (ref: $UPSTREAM_REF)."
-            for f in settings.gradle.kts build.gradle.kts gradle.properties gradlew gradlew.bat; do
-              if [ -f "/tmp/upstream/$f" ] && [ ! -f "$SRC_ROOT/$f" ]; then
-                cp "/tmp/upstream/$f" "$SRC_ROOT/$f"
-                echo "Completado da raiz original: $f"
-              fi
-            done
-            if [ -d /tmp/upstream/gradle ] && [ ! -d "$SRC_ROOT/gradle" ]; then
-              cp -r /tmp/upstream/gradle "$SRC_ROOT/gradle"
-              echo "Completado da raiz original: pasta gradle/"
-            fi
-            if [ -f "$SRC_ROOT/gradlew" ]; then chmod +x "$SRC_ROOT/gradlew"; fi
-          fi
-          added=0
-          for m in ZalithLauncher Guide InputMap ColorPicker CardGrid LayerController Terracotta PetLib; do
-            U="/tmp/upstream/$m/src/main/res"
-            D="$SRC_ROOT/$m/src/main/res"
-            if [ ! -d "$U" ] || [ ! -d "$SRC_ROOT/$m" ]; then continue; fi
-            while IFS= read -r f; do
-              if [ ! -e "$D/$f" ]; then
-                mkdir -p "$(dirname "$D/$f")"
-                cp "$U/$f" "$D/$f"
-                echo "Recurso completado: $m/src/main/res/$f"
-                added=$((added+1))
-              fi
-            done < <(cd "$U" && find . -type f | sed 's|^\./||')
-          done
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA41TXU/bMBR9z6+4iypohRKPPVL6MJUPIYGoCn2BbciNbxqLxLZsRwzUf7WfsD+26zatkrbTFkWKnfvh43POdeghwTp6hkQA85
+          VhtXHeIq/gOyyXsJAeslIrhCQRaHwBp7SaW66yAuLebPLwOL38evcyvbyKofDeuDPGqKio52mmK/bES9rc8pry0e5sv6ShfefUSObwDJ8gyan7
+          w3T8Mr2/f2QOvZdq4dKF5aLE9NW7mPAdHf07l/KG4AtUEQBmhYZ4yuUHCA3Xqzjw2qHyCEo7eLqZuCEQblOi54qS6LVotJP+9y8rNWgrF1LxEv
+          oW8zPoEDBIYzok1xZykAoOgIZ5LUvR/tEsjdUGrZe4+fO2+aZz7ocEgzoDrMgJ1+1wxnr5X9lYhbYEhCczh8q7JU3qmq9xQ0dgg4MN7G1YIAKa
+          5FzSR5BPog3KHTux9X1aOEX70H2xVkgTe7jLfmX0n4ANd5435LKVXjJqEbvb920LCbKi0gJOfh5KGoY29HIhUIw+R8EEVTBB1/BwXUuBcKNM7e
+          +4gbEutZ3I7JVCY27FtZUCbvk72rFW3uqypMAjWssz7Qn2BP2tnDd2mI12dayYsxmruFTMoguXuxi1hd2Pb6YtaDGL1yO/L06varFAwKSqcbgm
+          7q2QJMfN1cOI5oSLIFjetSs1C3pdHLBi9SqkhYQM2evTSvFqmzmIW3btzRqPXuyZc4pZbZ3ezqzQ5MnuPVs1a3l6/f5qcXI6GHTNC+dw3s8aMs
+          inuVQCUkj8u0Ea6iXNtIBjt/zxLWXL5fEgCkV/ACmMuWRDBQAA
+          B
+          bash -eo pipefail /tmp/s.sh
       - name: "Verificação 3/4 - identificar a estrutura real do projeto Android"
         run: |
           base64 -d <<'B64' | gunzip | python3 -
@@ -149,66 +102,35 @@ jobs:
           B64
       - name: "Verificação 4/4 - correção automática"
         run: |
-          set -uo pipefail
-          cd "${PROJECT_DIR:?}" && : "${APP_DIR:?}"
-          chmod +x gradlew
-          cat > /tmp/gb.sh <<'S'
-          cd "$PROJECT_DIR"
-          e() { grep -E '^e: ' "$REPORT_DIR/build-$2.log" | head -15; grep -nE 'error(\[E[0-9]+\])?:|panicked|could not compile|failed to run custom build' "$REPORT_DIR/build-$2.log" | head -20; grep -A14 -m1 "What went wrong" "$REPORT_DIR/build-$2.log" | head -16; }
-          f() { e "$@"; echo '--- final do log ---'; tail -n 60 "$REPORT_DIR/build-$2.log"; echo "::error title=Falha em $1::$(e "$@" | sed ':a;N;$!ba;s/\n/%0A/g')"; }
-          for i in 1 2 3 4 5; do
-            if ./gradlew "${APP_PATH}:$1" -I /tmp/oi.gradle --no-daemon -q --console=plain > "$REPORT_DIR/build-$2.log" 2>&1; then echo "Build $1 OK"; exit 0; fi
-            c=0
-            while read -r p l k n; do
-              [ "$n" = weight ] && { sed -i -E "${l}s/\.weight\([^)]*\)//" "$p"; c=1; continue; }
-              s=$(sed -n "${l}p" "$p"); r=$(echo "${s:0:$((k-1))}" | grep -oE '(drawable|mipmap|string)\.$' | cut -d. -f1)
-              if [ "$r" = string ]; then
-                X="$APP_DIR/src/main/res/values/zz_missing.xml"
-                [ -f "$X" ] || printf '<resources>\n</resources>\n' > "$X"
-                grep -q "\"$n\"" "$X" || { sed -i "s#</resources>#<string name=\"$n\">${n//_/ }</string>\n</resources>#" "$X"; c=1; echo "String criada: $n"; }
-                continue
-              fi
-              [ -n "$r" ] || { echo "SEM PADRAO: ${s:0:100}"; continue; }
-              mkdir -p "$APP_DIR/src/main/res/$r"
-              echo '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#888" android:pathData="M24,24m-20,0a20,20 0 1,1 40,0a20,20 0 1,1 -40,0"/></vector>' > "$APP_DIR/src/main/res/$r/$n.xml"
-              c=1; echo "Placeholder criado: $r/$n"
-            done < <(sed -nE "s#^e: file://([^:]+):([0-9]+):([0-9]+) Unresolved reference '([A-Za-z0-9_]+)'.*#\1 \2 \3 \4#p" "$REPORT_DIR/build-$2.log" | sort -u)
-            [ "$c" = 1 ] || { f "$@"; exit 1; }
-          done
-          f "$@"; exit 1
-          S
-          cat > /tmp/oi.gradle <<'O'
-          allprojects { tasks.matching { it.class.name.contains('KotlinCompile') }.configureEach { t ->
-            try {
-              t.compilerOptions.optIn.addAll([
-                'androidx.compose.material3.ExperimentalMaterial3Api',
-                'androidx.compose.material3.ExperimentalMaterial3ExpressiveApi',
-                'androidx.compose.foundation.ExperimentalFoundationApi',
-                'androidx.compose.foundation.layout.ExperimentalLayoutApi',
-                'androidx.compose.animation.ExperimentalAnimationApi',
-                'androidx.compose.ui.ExperimentalComposeUiApi',
-                'androidx.compose.animation.ExperimentalSharedTransitionApi'
-              ])
-            } catch (e) {}
-          } }
-          O
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA51WbZPTNhD+nl+x9aU4gbMdh5ShzgtNjzBQSpO5g4Fpkt7obCVWT5aMJN8dJPnvXdnOvcBwZfji2KvdR7vPsytFUwNeISFnOV
+          0RxhtxAk5zMzue/jE5env6/NVx9GznwIMHEFn7eDbb2xpxmskEHl3BWpGE08tGTAyMIDBZHqzPfJ3CYOCeuBXiLUCnQVtt2GAYzcGbgPsPjcBF
+          n+PJbHpcugRnBeOJ1+z6XK4d2EJKSQJe+Eu/jhIYRpWSqrWYT+Yd79flo8Wy/Sza5kSw+Jwm21gWPAEhDcQyyxmnW1seTcBIUIWAuNBGZlBu9F
+          2bdzv7zcdhD7wsBOd9ihVfUoEPJQX6fk8NT/qwa6xKBigG/Ob0gcapBNfzPFgxQTgkEjAG0OD2wWDaWDA86dwDX2M4UVSyAoYZTocvCE8J0Aya
+          YRQ1W9V2mIlGGtyI9P/qN386I30dLETwc2ccrN22U2aHCAyYgBC68Bh6gLwnsgHAVuAHtdz7dpiN377cRc3QAe9VJb5kfuWDFQjpJYRmUoD3ET
+          9jKbTEzHJOEH50H2Hd0YMQq0+pqGv73S5jKTB9beu9YgZQkhXDvOJhB5+XKQoMqqRZQQ4czkHUmQPMcTPhwBAFY+vUwNI29abkwmO2D7EevkMu
+          /Mph0Zr/014+XLSDwAqb457xEDPCEgwTBbVEWVw9bLZKEFEh5JV3uw8KV6rUmxsddVCB1rkXtts7q0HVShL7uJUocknOsEMzlmck32qjmFi3F3
+          7TRce4wAlNfPBWYbvcEEWwtShbS+UKy4qochngw9Bp1oMaaBUHGXIdKKqDC8IL/Pn8+TRjWmOgf5Vxp46a4w4I+8FBZrZbyBHYrMAdYKAsVEz1
+          aCEGwe0vtxTwwx6gqugjOAskeuE4FRhCXZPs6IPbCAeDOn1BMjqsokbNjQiC0wB2g6Ba/WLbgwq3FqOi96SCiRUjCYkAZd6LA9dylZ9ls5Slio
+          rBZZVfDTN5A7Px8+PxFDFKxcJOZ+d8LXl2njAFXg7f4BmRS79qrgcXNDY4Uci10BERiZIsGTqpMXkUBDpOaUa0X9t9PK0Ckp+XOLXNgfolumSJ
+          SYdO72mS3xjTsl2/tF4weplLZd7vQ75eenkd6IwGOTHptceKcX4kuVRD5+Dp01uh1us5MWTovOn2Dru9DI/Fww7BR7cDHQgPQ+h9afCsxQlGg6
+          AiYlT1zTeYC5ripitvaTzjJKap5AlVldASRbLe1jORgsIABvUgTmyn2VsF66DIMU5ytHzUjlrVTXHzAu+E7Sx+gWGKrqiiIqY4kfOx9zfxPqPT
+          KXq5/sODRQiLLiwew6J3kP/PQa+RW7xU7bTaQY3toIb7Vlvtz3x7foW2o2zyjbvmxsnty/TmPMULdeo2COe5kv8imRoBDdHn2s+IiVM7BBtgxo
+          850dq3Y+Xb3kV2dct9LQ1n4qi6Dd027Ozaiq0LRSckTi0UeCNM2qhPsCn5N359eappbhie3b7MzSvhkyQZc96a1zPm1u1xVbpLTW06FEXij/3J
+          VY5vGV6ShL/ZW8c5cw9/NBiNKJpmF/R+mJUsREJs2ndwXlybvzuck0+yMHdQ/ixN9yPgX5Hs6/3He+v9wQW7E3VUmd+xH9nyJCWKJm8VEZrtdy
+          4hlrZHdxDb5oEWxf8ku8YOW3L6H06vXPwXCgAA
+          B
+          bash -eo pipefail /tmp/s.sh
       - name: Adicionar Java 21 e 25 ao projeto
         run: |
-          set -eu
-          A=$(find "$SRC_ROOT" -type d -path "*/src/main/assets/runtimes" | sort | head -1)
-          [ -n "$A" ] || { echo "::error::assets/runtimes nao encontrada"; exit 1; }
-          mkdir -p "$A/jre-21" "$A/jre-25"
-          W="$GITHUB_WORKSPACE"
-          [ -f "$W/jre-21-universal.tar.xz" ] || { echo "::error::jre-21-universal.tar.xz ausente na raiz"; exit 1; }
-          cp "$W/jre-21-universal.tar.xz" "$A/jre-21/universal.tar.xz"
-          if [ -f "$W/jre-25-universal.tar.xz" ]; then
-            cp "$W/jre-25-universal.tar.xz" "$A/jre-25/universal.tar.xz"
-          else
-            ls "$W"/jre-25-universal.tar.xz.part* >/dev/null || { echo "::error::jre-25 (ou .part00/.part01) ausente na raiz"; exit 1; }
-            cat "$W"/jre-25-universal.tar.xz.part* > "$A/jre-25/universal.tar.xz"
-          fi
-          xz -t "$A/jre-21/universal.tar.xz" "$A/jre-25/universal.tar.xz"
-          ls -l "$A/jre-21" "$A/jre-25"
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA42S0WvCMBDG3/NXHMEHFWLsoC8VB07GNvbgUIcPY0horzRbTUtyFefc/77oBs7Nlj1dIHff97svcUggsGKjYaudapMAb82m4+
+          V0MplzEPRWIiQgSkUZ8K50NpYrpY1UziE5aStDeoWOww5cYcmXDJUfCDrsCYTxaiMOz7DbwTtgnBXAowitLWwU/ZIAowpAExeGrEoUHwBuNEEw
+          gA+2ek209RR7OfliUVwE/HgOOVsMeevmbn77eLVcTKb3s4fR+JrvCVLftvgeEZXRa7RO5T1StrfZ1pHVtIOqHBpCTwpW6e0JYlw2Ox3J5Z9Lpl
+          M4ZQ3PsQ6AMjQM4KdX2OQVnvHC3KHXyN1eg9eJ9EplqQuXMsG1NFWe1wcVQruo4DDQ78uvGnQaw/IrKPqXf/MuqWb+WQQ1ptss4XMQed2/+gQt
+          Rrt3HQMAAA==
+          B
+          bash -eo pipefail /tmp/s.sh
       - name: Instalar JDKs necessários
         uses: actions/setup-java@v4
         with:
@@ -216,16 +138,13 @@ jobs:
           java-version: ${{ env.JDK_LIST }}
       - name: Instalar Android SDK
         run: |
-          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          B="$ANDROID_HOME/cmdline-tools/latest/bin"
-          if [ ! -x "$B/sdkmanager" ]; then
-            curl -fsSL -o /tmp/ct.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-            unzip -q /tmp/ct.zip -d /tmp/ct && mkdir -p "$ANDROID_HOME/cmdline-tools" && mv /tmp/ct/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
-          fi
-          echo "$B" >> "$GITHUB_PATH"
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-          yes | "$B/sdkmanager" --licenses >/dev/null 2>&1 || true
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA41RwU4CMRC971eMDeFWBjyIwbgJBCJEBQPoxZjNsi3Q0G3XtktA8d/tohhWE/XUTue9N69v+CbTxkF72B2PBt2oP7rtXZLK63
+          Hdophbg1InsUQpZhgrZrRgaNnqjQQdjz+GY5IyKRSnTmtpUcaOW4czoUgg5vAIJ0A3QCqdgp7GKl5wQ+DpAtySqwAgyY0EOreTG6Aa0KUZJq72
+          IjJYOpfZFiKTtYXWC8lriU6/zBieaSucNlv0z154b2LvgfpbvqGNRr151qyfRx+WCk0/L1eFNn0ujaLsUEK1CumKCQM0g98+SvbI9YFXbsI/Ii
+          LBXAQ8WeoiHAJh6M+rwbR/34nu2tM++eyVNlVSLXN6w4fvlEn3OhqPRtM/aVtuYfdjR9TnmHBlfTNExteocinhNKw2YLcDZ3L+DnW+mQVNAgAA
+          B
+          bash -eo pipefail /tmp/s.sh
       - name: Instalar NDK
         if: env.NDK_VERSION != ''
         run: |
@@ -265,27 +184,20 @@ jobs:
           echo "BUILD_DEBUG=$d" >> "$GITHUB_ENV"; echo "BUILD_RELEASE=$r" >> "$GITHUB_ENV"
       - name: Trocar nome e ícone do app (Cat Launcher)
         run: |
-          cd "$PROJECT_DIR"; P="$APP_DIR/gradle.properties"; touch "$P"
-          sed -i -E '/^launcher_(app_)?name=/d' "$P"
-          printf '\nlauncher_app_name=Cat Launcher\nlauncher_name=Cat Launcher\n' >> "$P"
-          python3 - <<'P'
-          import zlib,struct,os,glob
-          R=os.path.join(os.environ["PROJECT_DIR"],os.environ["APP_DIR"],"src/main/res")+"/"
-          C=dict(O="E8923A",D="B0621C",W="F5EBDD",G="5CC84A",B="1B1B1B",P="E58A9A")
-          H="........ ........ ..DD.... ..DOD... ..DOOOOD ..DOODOO ..DOOOOO ..DOBGGO ..DOOBBO ..DOOOOP ..DOWWOP ..DOWWWB ..DDOWWW ...DDOOO ....DDDD ........".split()
-          G=[[bytes.fromhex(C.get(c,"2B1B4D")) for c in h+h[::-1]] for h in H]
-          def png(s):
-           w=lambda t,d:struct.pack(">I",len(d))+t+d+struct.pack(">I",zlib.crc32(t+d))
-           r=b"".join(b"\0"+b"".join(G[y*16//s][x*16//s] for x in range(s)) for y in range(s))
-           return b"\x89PNG\r\n\x1a\n"+w(b"IHDR",struct.pack(">IIBBBBB",s,s,8,2,0,0,0))+w(b"IDAT",zlib.compress(r))+w(b"IEND",b"")
-          P=os.environ["PROJECT_DIR"]+"/**/src/*/res/"
-          for f in glob.glob(P+"mipmap-*/ic_launcher*",recursive=True)+glob.glob(P+"drawable*/ic_launcher_foreground.*",recursive=True): os.remove(f); print("removido",f)
-          os.makedirs(R+"drawable-nodpi",exist_ok=True); open(R+"drawable-nodpi/ic_launcher_foreground.png","wb").write(png(192))
-          for d,s in dict(mdpi=48,hdpi=72,xhdpi=96,xxhdpi=144,xxxhdpi=192).items():
-           os.makedirs(R+"mipmap-"+d,exist_ok=True)
-           for n in ("ic_launcher","ic_launcher_round"): open(f"{R}mipmap-{d}/{n}.png","wb").write(png(s))
-          print("icones criados em",R,len(glob.glob(R+"mipmap-*/ic_launcher.png")))
-          P
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA3VUXW/iOhB9z6+wRiuREJMUSnuBbroCwtJeXW0jVKkPwEUhNsRbYkdOKHSr/ve1k8DSj7URHM+Mx2fGx0QEwZdgcvfvaHi/8G
+          8ncIUCD770g0Cv3LUMyYY6qRQplTmjmfLnYhvFehcYGSWowVBjhGru/5twy6OYyoUZpunC+sbDhHouqZWhqWQ8X6HajB/jdFgRNAxz9F9lPfF/
+          4quh6+sq33MeC36OGujr11pQM1iSCpmjXxu2xFkut1GORYbXG7E0Jp7InDTMY+enYNxUC8qfmBR8CqeVz/Gpp+qAskImIzcJGXelqt+ywQVj6B
+          EW5eadB6NOt3XeB+x7MDi7bDWHgB88+H4xGvg+4LEHF8Nhp60CBh40B3oCVh0eXXT63T5Yxo0HTjXQCfD9A7jzD0ANvwTqc7CUYDAeV5bB4OgK
+          CvDwcAQPgyKzRvos3y+3a+T7x9PBydINy03LGHvT6fI5p5mzkiKJ6d4cOmuamxGGliqk7YNloZWQKEKMo9iOp71eozmfF7ZY227mBqErlPK1mV
+          k9A+28TZgsSYhyTHrlNambiR5NuL4FvKHcJJZl5zaxPzj1zTqRjM5bpvJbloGktwQo73QJszOwj8vx9LnevHTdbD7dV6DgtNecZMjXVNEpqT+/
+          MamkNN9KjlTCfacb/BjPlOpm+2Y442Dv1Dm3N/4E8Dt2twM9lFnNDm7hMz1VIcUGv39/YC+SVGkoM+XBN/qhRKJoW0bg/VWXSnH1uqtVWNcSVP
+          LTxFeauNa3o7/MwIaEpUmYNuouixaHR1QHLGm0lRl7ot693FLLfrOHyHAXLjf0zaaFyk/XUmw5cT4m6CHFVNJEPFFzZV2h4mWbUFgYEYBXlqEi
+          kvCREiYzc/LnlAYXJGWA6Z5l+UI8lgmvkPp34R/j/kZJqQkw7JZgOTvJcmpqeTW7LXV9ujEEZ7o1xQNNVBqv3cGx/v2nhfcF6F7ifYma7baCFV
+          YZHJUuyUwt1XclVM0Fm7xjbxQy4vpIE04YK4qn/AvqoJuna13By+S1SvlCXt0X/vp5WVqTVYNZJDjNUCRZSESGaAJ4UjyZPxc6+VwERWpLZQp+
+          A0jrVQDvBQAA
+          B
+          bash -eo pipefail /tmp/s.sh
       - name: Criar keystore de debug ausente
         run: |
           cd "$PROJECT_DIR"
@@ -306,33 +218,23 @@ jobs:
           fi
       - name: Fechar cabeçalhos de licença abertos
         run: |
-          cd "$SRC_ROOT"
-          python3 - <<'PY'
-          import pathlib
-          for p in pathlib.Path('.').rglob('*.kt'):
-              if 'build' in p.parts: continue
-              s = p.read_text(encoding='utf8', errors='replace')
-              if s.startswith('/*') and '\npackage ' in s:
-                  head, rest = s.split('\npackage ', 1)
-                  if '*/' not in head:
-                      p.write_text(head.rstrip('\n') + '\n */\n\npackage ' + rest, encoding='utf8')
-                      print('corrigido:', p)
-          PY
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA1WPzWoCMRDH7/sUgxRms9pI6aWIe+oDKLYXQZC4G3cHt0mYjNi+fZMVW51LIPP/+E3TwuTpY/O+36xWn5Mi/Ejv3Ss8w3KJ6y
+          0W9BU8CwQj/UCH4ugZApC7feh1ekvUqDR3gz+UWOmToFoUkIaOgIczDS2OFh0MS1xA452QO9tRE6FOG7am3Yv9ltK6xrfkuhrPcnzDGVhmz7FG
+          tmEwjUV1i446Sg68UEaYV6jAuBZw54JpTqazMNbGK0uePrXMgG2UVJrsYSAp7/UzeFF/6kxfzRGcl5yTzf9ReYK+MIm9cue15ihMIUcmmGlGgW
+          q+c/dE07E/nfV4p3pMZnKJrPHM1FHrF4ksqGK9/QWwjg2vrwEAAA==
+          B
+          bash -eo pipefail /tmp/s.sh
       - name: Corrigir CatCore (Rust)
         run: |
-          python3 - <<'PY'
-          import os, pathlib
-          A = "use crate::{batch, hash, launch, manifest, plan, runtime, version, versions};"
-          B = "use crate::{batch, hash, launch, manifest, perf, plan, runtime, verify, version, versions};"
-          C = ") -> impl FnMut(&str) -> bool + 'a {"
-          D = ") -> impl FnMut(&str) -> bool + 'a + use<'a, 'l, 'o> {"
-          for p in pathlib.Path(os.environ["SRC_ROOT"]).rglob("jni_bridge.rs"):
-              if "target" in p.parts: continue
-              s = p.read_text(encoding="utf8")
-              n = s.replace(A, B).replace(C, D)
-              if n != s:
-                  p.write_text(n, encoding="utf8"); print("corrigido:", p)
-          PY
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA5VRTUvDQBC951eMezAJTXPxIukH9ANv0lK9FJGySTbJSjobZifVUvzvblLagyjowH7M8ua9mbfNkSuDdzCE8dhfb31P7xtDDM
+          ZG0Eiuap16M5iAaK2CjCSrJDmlkrMqgkpat9eyxS7bS9SFsuzqaokRUIus9yqCgyKrDV4v9nMkvPl/ORUVPzHr4viLwqJTCGE4BTdSDQ/42HJw
+          a5n6t9SYGgbgSzgJb/lH6ABcx2NfRuDXbplpV1wYggY0XuyK1+4MjI0VHjQZfBFPm8Vus1o9i9cwprI2aSDeUO9S0nmpYrIiTDxwoQsQLKlULH
+          q+uJHENoHMuHmxVT3Iul6bmJTMd6w+OFCYmVxjOREtF/ci7EHoQNaBnF+ZCmYRzMNrtohgGV70EG4c8izfRRO/k2Z1pnaGfmcfQUMaORCZIdKl
+          zk0i3LeE3nr7BU3J7JJKAgAA
+          B
+          bash -eo pipefail /tmp/s.sh
       - name: Corrigir import do Choreographer (UiTimings)
         run: |
           grep -rl --include=*.kt 'import android.os.Choreographer' "$SRC_ROOT" | while read -r f; do
@@ -341,4 +243,42 @@ jobs:
           done
       - name: Compilar Debug
         if: env.BUILD_DEBUG == 'true'
-       
+        run: |
+          cd "$PROJECT_DIR"
+          bash /tmp/gb.sh assembleDebug debug
+      - name: Compilar Release
+        if: env.BUILD_RELEASE == 'true'
+        run: |
+          cd "$PROJECT_DIR"
+          bash /tmp/gb.sh assembleRelease release
+      - name: Coletar APKs
+        if: always()
+        run: |
+          base64 -d <<'B' | gunzip > /tmp/s.sh
+          H4sIAAAAAAACA2WSX2+bMBTF3/kUZ1akFCrirY+wVIqaSu2mNVG0t2mrHHwJVo2xwLTdxIffJaxppL3h++/87rl0FHBJuGzgjadSGRvVT9q0SD
+          1kqL1U/qmLtksx2+42X25vvj+u73ciMiV+IP0DDgv8zBEqctguFzlKE5XG6SmTht+eUCJ1qibMkwVPm/NoFSp+yX1vrJZNH3wfulFJJnNcXUtN
+          z9L11uL6xGBNFxbhNUQvlbGElpRG2qLMoZsII4xjyZJhMAwoGheM64kzo/JydrFXHR0hxqKY48cNxGy1u7kT+LCEUNaeVuE8UHALV4xdAmaKAc
+          m/nmRIemeeqe2UTWLk+Vs+Pqm/BalTBX+wMzzUT5jiZK6cFCLdOMLn/xe2HVJbnR2jbHhvBnoPyaOxoxU8/GJs0JitHta7zf368W7z7XZyOg1N
+          Y7lYYkDgSyP9FCvlw5WA7muPvdIH4w4T4IBDSwz7S3lvTaGCaVwmRg1HZ+c/qq3eUc7PF5/7SUXFdFn2olrHIln2QK7qa6y2X3GgVulmIfjPie
+          jVBHz8Cz3v+1aXAgAA
+          B
+          bash -eo pipefail /tmp/s.sh
+      - name: Publicar APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "Cat Launcher"
+          path: "/tmp/apks/*.apk"
+      - name: Publicar logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "Logs"
+          path: "/tmp/zreport/*.log"
+          if-no-files-found: ignore
+# fim do arquivo - pode apagar esta linha 01 ----------
+# fim do arquivo - pode apagar esta linha 02 ----------
+# fim do arquivo - pode apagar esta linha 03 ----------
+# fim do arquivo - pode apagar esta linha 04 ----------
+# fim do arquivo - pode apagar esta linha 05 ----------
+# fim do arquivo - pode apagar esta linha 06 ----------
