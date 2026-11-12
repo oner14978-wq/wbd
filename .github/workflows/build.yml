@@ -51,7 +51,7 @@ jobs:
       - name: "Verificação 1/4 - juntar Cat__NN.zip/.bin, extrair e testar"
         run: |
           set -uo pipefail
-          PARTS_EXPECTED=22    # quantidade de arquivos Cat__NN (.zip ou .bin)
+          PARTS_EXPECTED=29    # quantidade de arquivos Cat__NN (.zip ou .bin)
           : > "$REPORT_DIR/zips.txt"
           mapfile -t parts < <(
             find "$GITHUB_WORKSPACE" -type f -iregex '.*/Cat__[0-9]+\.\(bin\|zip\)' -not -path '*/.git/*' 2>/dev/null \
