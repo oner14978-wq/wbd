@@ -246,6 +246,14 @@ jobs:
           find "$SRC_ROOT" -name Cargo.toml -not -path '*/target/*' | while read -r t; do
             [ -f "$(dirname "$t")/Cargo.lock" ] || { echo "Gerando Cargo.lock em $t"; cargo generate-lockfile --manifest-path "$t"; }
           done
+      - name: Corrigir E0700 (lifetime oculto em progress) em jni_bridge.rs
+        if: env.HAS_RUST == 'true'
+        run: |
+          F="$SRC_ROOT/CatCore/rust/src/jni_bridge.rs"
+          sed -i -E "s/-> impl FnMut\(&str\) -> bool \+ 'a \{/-> impl FnMut(\&str) -> bool + use<'a, 'l, 'o> {/" "$F"
+          grep -n "impl FnMut(&str) -> bool" "$F"
+          grep -q "use<'a, 'l, 'o>" "$F" || { echo "::error::patch do progress() nao aplicado em jni_bridge.rs"; exit 1; }
+          rustc --version
       - name: Corrigir imports Rust (jni_bridge) e diagnosticar
         if: env.HAS_RUST == 'true'
         continue-on-error: true
@@ -338,17 +346,4 @@ jobs:
             cp "$f" "/tmp/apks/$name"
           done < /tmp/apklist.txt
           ls -lh /tmp/apks
-          for f in /tmp/apks/*.apk; do "$(ls -d $ANDROID_HOME/build-tools/*/ | tail -1)aapt2" dump badging "$f" | grep "^application:"; done
-          if [ -z "$(ls -A /tmp/apks 2>/dev/null)" ]; then
-            echo "::warning::Nenhum APK gerado."
-          fi
-          exit 0
-      - name: Publicar APKs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Cat Launcher
-          path: /tmp/apks/*.apk
-          if-no-files-found: warn
-
-          
+          f
