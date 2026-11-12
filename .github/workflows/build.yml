@@ -118,7 +118,7 @@ jobs:
       - name: "V3 achar projeto Android"
         run: |
           base64 -d <<'B64' | gunzip | python3 -
-          H4sIAAAAAAACA51Y607jShL+76dotVbCZsDA/NlzzMlBnIHDcCCAAjNaKcmJOnE7GHyT2wkZZfIwq/2xDzCPwIvtV93txAlZ9hKJxF2uqq6q/urSxGmRlxXL1R4r5R5T3/AwTvKho8oRa4Huy2wal3nW5fedT4PO7e0D7x+Dt9h42zm/u+08DM4uO7zv3F9d3uH9nA8ncRLyPcb9cSnCRJrHuKLfLA/lIM3DSSKVpo9mM/qtRDmWFV84oYzYi0ie3aFQ0gschk+UlyzcYyHMjBSLM7Jhk4c+oeoGfZjQnWmR
+          H4sIAAAAAAACA51Y607jShL+76dotVbCZsDA/NlzzMlBnIHDcCCAAjNaKcmJOnE7GHyT2wkZZfIwq/2xDzCPwIvtV93txAlZ9kKJxF2uqq6q/urSxGmRlxXL1R4r5R5T3/AwTvKho8oRa4Huy2wal3nW5fedT4PO7e0D7x+Dt9h42zm/u+08DM4uO7zv3F9d3uH9nA8ncRLyPcb9cSnCRJrHuKLfLA/lIM3DSSKVpo9mM/qtRDmWFV84oYzYi0ie3aFQ0gschk+UlyzcYyHMjBSLM7Jhk4c+oeoGfZjQnWmR
           GbGGEIjwmOUVLcnI/lLgWyyTkFRHyhmJDLwQ7jt2P7OX3giBadiSEd3lSlZVnI2VddN/rrRLG2TeMBCWaNlIBUzv54uikFnouqE/yidZ5cIzJQtvj1wsRPXoP+Vx5sKYzPM8h+ThhxY1WosyhhQPAlmWeRkENzJ7nKRswwaXbPOYzEZ5VoGSM1G8/lBMMDnD+vWfr//Ife4dExR8OYsr98gzAfEVkOLSG6sREdIvuof97hFAUZT5k0GFNjeMy0yk0q3Ztc2JzFwt5LFf2dGG4XAoHskg+Pr69zLO1abpDaPV
           MZsoqMlZzlIRK1YKlQcI+Wozq/Wuc/vH+ScNTNYCAxnpaWiVUoRuYY+klNWkBJpwBG6xp3cKoafFJ1W0/xPkdFBVi8fjLC9xkr4W9xxVIW7wWi8buyMCDQglcSbptDW3r4okroikXLs9sRLBV1UZF1BrIVJKPxXV6NEteZyNkkkoe0PysgEks9MHssCP4iwUSQJuzrt8p+8GJ90/8fvBoxWIJLqyraAtCuwpykq9xNUjDoEDG4mSDE/sAys0yAsyXUv1nXyKSMShJAXzxX/lXKrDAzCLUnvCOR2CHFU9t6d2
           jZ0NM0HreT3f8pzFJQgtf/dEM27yneD7L9qxZviW8UsDtjS4mwJH+aQAoKky1KuPnmOL0Moj7XAYjyo/KvP0WX5Trna/dsjwdwvSs9Tvo2oRdgprBcUSKCkSMZK0QD044F4NzIinrz+gBjAP5SgRGtUBm1OCWP3egnsOqoKG0TFLY6UArhWoCqrZCZlqBfy4kuky7GEjF3XpoIhqEROeYUSqIn3CkSljulxv1LAmDeBAUGulsYpiFJTN8hR5Xr+OP5WoFTsqght6jMom6MNoBWLrW10DIz4vFmz/VzaHtQuq
@@ -297,50 +297,58 @@ jobs:
           fi
       - name: Corrigir comentários Kotlin
         run: |
-          find "$SRC_ROOT" -name '*.kt' -exec perl -pi -e 's#^(\s*(?:/\*+|\*)(?!/))(.*)#my($a,$b)=($1,$2);$a.($b=~s,/\*,/_,gr)#e' {} +
-      - name: Compilar Debug
-        if: env.BUILD_DEBUG == 'true'
-        run: |
-          cd "$PROJECT_DIR"
-          bash /tmp/gb.sh assembleDebug debug
-      - name: Compilar Release
-        if: env.BUILD_RELEASE == 'true'
-        run: |
-          cd "$PROJECT_DIR"
-          bash /tmp/gb.sh assembleRelease release
-      - name: Coletar APKs
-        if: always()
-        run: |
-          set +e +o pipefail
-          mkdir -p /tmp/apks
-          P="$PROJECT_DIR"
-          if [ -z "$P" ]; then P=.; fi
-          find "$P" -type f -name '*.apk' -path '*/build/outputs/apk/*' 2>/dev/null > /tmp/apklist.txt
-          while read -r f; do
-            [ -n "$f" ] || continue
-            name=$(basename "$f")
-            if [ "$ARCH" != "all" ]; then
-              case "$name" in
-                *"$ARCH"*|*universal*) ;;
-                *) continue ;;
-              esac
-            fi
-            cp "$f" "/tmp/apks/$name"
-          done < /tmp/apklist.txt
-          if [ -z "$(ls -A /tmp/apks 2>/dev/null)" ]; then
-            echo "::warning::Nenhum APK gerado."
-          fi
-          exit 0
-      - name: Publicar APKs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Cat Launcher
-          path: /tmp/apks/*.apk
-      - name: Logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Logs
-          path: /tmp/zreport/*
-          
+          python3 - <<'PY'
+          import os
+          def fix(s):
+              out = []; i = 0; n = len(s); d = 0
+              while i < n:
+                  c = s[i]; t = s[i:i+2]
+                  if d:
+                      if t == '*/': d = 0; out.append(t); i += 2
+                      elif t == '/*': out.append('/_'); i += 2
+                      else: out.append(c); i += 1
+                      continue
+                  if t == '//':
+                      j = s.find('\n', i); j = n if j < 0 else j
+                      out.append(s[i:j]); i = j
+                  elif t == '/*':
+                      d = 1; out.append(t); i += 2
+                  elif s.startswith('"""', i):
+                      j = s.find('"""', i + 3); j = n if j < 0 else j + 3
+                      out.append(s[i:j]); i = j
+                  elif c == '"':
+                      j = i + 1
+                      while j < n and s[j] not in '"\n':
+                          j += 2 if s[j] == '\\' else 1
+                      j = min(j + 1, n)
+                      out.append(s[i:j]); i = j
+                  elif c == "'":
+                      j = i + 1
+                      if j < n and s[j] == '\\':
+                          k = s.find("'", j + 2)
+                          j = k + 1 if 0 <= k - i < 12 else i + 1
+                      elif j + 1 < n and s[j + 1] == "'":
+                          j += 2
+                      out.append(s[i:j]); i = j
+                  else:
+                      out.append(c); i += 1
+              if d:
+                  out.append('\n*/\n')
+              return ''.join(out)
+          root = os.environ["SRC_ROOT"]
+          changed = 0
+          for dp, dn, fn in os.walk(root):
+              if '/build' in dp or '/.git' in dp:
+                  continue
+              for f in fn:
+                  if not f.endswith('.kt'):
+                      continue
+                  p = os.path.join(dp, f)
+                  s = open(p, encoding='utf-8', errors='surrogateescape').read()
+                  r = fix(s)
+                  if r != s:
+                      open(p, 'w', encoding='utf-8', errors='surrogateescape').write(r)
+                      changed += 1
+          print("Arquivos .kt corrigidos:", changed)
+          PY
+      - nam
