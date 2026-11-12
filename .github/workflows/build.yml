@@ -318,6 +318,21 @@ jobs:
                       p.write_text(head.rstrip('\n') + '\n */\n\npackage ' + rest, encoding='utf8')
                       print('corrigido:', p)
           PY
+      - name: Corrigir CatCore (Rust)
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          A = "use crate::{batch, hash, launch, manifest, plan, runtime, version, versions};"
+          B = "use crate::{batch, hash, launch, manifest, perf, plan, runtime, verify, version, versions};"
+          C = ") -> impl FnMut(&str) -> bool + 'a {"
+          D = ") -> impl FnMut(&str) -> bool + 'a + use<'a, 'l, 'o> {"
+          for p in pathlib.Path(os.environ["SRC_ROOT"]).rglob("jni_bridge.rs"):
+              if "target" in p.parts: continue
+              s = p.read_text(encoding="utf8")
+              n = s.replace(A, B).replace(C, D)
+              if n != s:
+                  p.write_text(n, encoding="utf8"); print("corrigido:", p)
+          PY
       - name: Compilar Debug
         if: env.BUILD_DEBUG == 'true'
         run: |
@@ -331,22 +346,4 @@ jobs:
       - name: Coletar APKs
         if: always()
         run: |
-          set +e +o pipefail
-          mkdir -p /tmp/apks
-          P="$PROJECT_DIR"
-          if [ -z "$P" ]; then P=.; fi
-          find "$P" -type f -name '*.apk' -path '*/build/outputs/apk/*' 2>/dev/null > /tmp/apklist.txt
-          while read -r f; do
-            [ -n "$f" ] || continue
-            name=$(basename "$f")
-            if [ "$ARCH" != "all" ]; then
-              case "$name" in
-                *"$ARCH"*|*universal*) ;;
-                *) continue ;;
-              esac
-            fi
-            cp "$f" "/tmp/apks/$name"
-          done < /tmp/apklist.txt
-          ls -lh /tmp/apks
-          for f in /tmp/apks/*.apk; do "$(ls -d $ANDROID_HOME/build-tools/*/ | tail -1)aapt2" dump badging "$f" | grep "^application:"; done
-          if [ -z "$(ls -A /tmp/apks 2>/dev/nul
+          set +e +o pip
